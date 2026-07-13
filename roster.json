@@ -1,0 +1,21 @@
+{
+  "confidence_test": {
+    "by_name": {
+      "M365Copilot.exe": [0.90, 1.0]
+    },
+    "by_pid": {}
+  },
+  "tcp_stats_test": {
+    "by_name": {},
+    "by_pid": {
+      "10400": {"label": "httpbin fixture", "domain": "httpbin.org"}
+    }
+  },
+  "scan_latency_test": {},
+  "dns_correlation_test": {
+  "domains": ["httpbin.org", "chatgpt.com"]
+  },
+  "schannel_test": {
+  "domains": ["copilot.microsoft.com"]
+  }
+}

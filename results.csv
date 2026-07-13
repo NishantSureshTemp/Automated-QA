@@ -1,0 +1,9 @@
+test,subject,expected,actual,result,comments
+confidence_test,M365Copilot.exe (PID 9108),0.9-1.0,0.95,PASS,
+tcp_stats_test,PID 10400 (httpbin fixture) -> httpbin.org,"bytes_out>0, bytes_in>0, rtt>0",bytes_out=823 bytes_in=4686 rtt=0ms,FAIL,bytes non-zero on 2/3 snapshot(s) but rtt=0ms on all. RTT not being computed (known defect)
+scan_latency_test,scan interval,"short gaps present, no poll-range gaps","143 gap(s): 0 short (<5s), 143 poll-range (25-40s), 0 anomalous (>40s), 0 other (5-25s)",FAIL,poll loop -- no event-driven scans detected -- 144 scans observed
+scan_latency_test,ETW process-added to scan latency,< 50ms,"26656ms (worst case, PID 3140)",FAIL,process \Device\HarddiskVolume3\Program Files\WindowsApps\PythonSoftwareFoundation.PythonManager_26.2.240.0_x64__3847v3x7pw1km\python.exe (PID 3140) added at 21:53:58.146 -- next scan fired 26.7s later (event-driven dispatch not implemented)
+scan_latency_test,event-driven dispatch markers,scan triggered within 50ms of ETW event,none found,FAIL,13 AI process ETW event(s) received but no event-driven scan markers found in log -- scanner appears to be ignoring ETW events for dispatch
+dns_correlation_test,httpbin.org,DNS status=0 + TCP source=dns_etw,DNS answers=4 transport=DoH latency=1005ms -- TCP domain=httpbin.org source=dns_etw url=https://httpbin.org,PASS,
+dns_correlation_test,chatgpt.com,DNS status=0 + TCP source=dns_etw,DNS answers=2 transport=UDP latency=0ms -- TCP domain=chatgpt.com source=dns_etw url=https://chatgpt.com,PASS,
+schannel_test,copilot.microsoft.com,sni + ver + cipher present,pid=672 sni=copilot.microsoft.com ver=TLS 1.2 cipher=0xc02f kex=?(255),PARTIAL,kex unresolved: ?(255) (known defect SAVR-15); alpn not captured (known defect SAVR-15)
