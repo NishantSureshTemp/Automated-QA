@@ -20,7 +20,7 @@ LATENCY_PASS_MS = 50            # acceptance criteria from TC-DET-09
 class ScanLatencyTest:
     name = "scan_latency_test"
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, agents=None):
         # no roster config needed for this test
         # cfg may be empty dict, that's fine
         self.scan_timestamps = []   # datetime of each "Starting process scan"
