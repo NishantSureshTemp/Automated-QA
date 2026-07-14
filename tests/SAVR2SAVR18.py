@@ -19,7 +19,7 @@ TCP_RE = re.compile(
 class DnsCorrelationTest:
     name = "dns_correlation_test"
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, agents=None):
         self.domains = cfg.get("domains", [])
 
         # per domain state
