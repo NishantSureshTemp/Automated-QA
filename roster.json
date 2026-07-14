@@ -1,21 +1,56 @@
 {
-  "confidence_test": {
-    "by_name": {
-      "M365Copilot.exe": [0.90, 1.0]
-    },
-    "by_pid": {}
+  "registration_test": {
+    "require_zero_agents": true
   },
-  "tcp_stats_test": {
-    "by_name": {},
-    "by_pid": {
-      "10400": {"label": "httpbin fixture", "domain": "httpbin.org"}
-    }
+  "heartbeat_payload_test": {
+    "required_fields": [
+      "ip_address",
+      "hostname",
+      "device_token",
+      "agent_count",
+      "status",
+      "last_scan_time"
+    ],
+    "forbidden_fields": [],
+    "stats_key": "sys_stats",
+    "stats_required": [
+      "cpu_percent",
+      "memory_mb",
+      "disk_usage",
+      "uptime"
+    ],
+    "last_scan_time_format": "epoch",
+    "require_response_success": true
   },
-  "scan_latency_test": {},
-  "dns_correlation_test": {
-  "domains": ["httpbin.org", "chatgpt.com"]
+  "combined_fields_test": {
+    "event_files": [],
+    "event_dir": null,
+    "required_fields": [
+      "os_name",
+      "os_version",
+      "logged_in_user",
+      "network_adapters",
+      "route_table",
+      "working_set_bytes",
+      "thread_count",
+      "handle_count",
+      "process_start_time",
+      "flow_id",
+      "src_ip",
+      "dst_ip",
+      "bytes_out"
+    ],
+    "expect_event_type": "agent_detected",
+    "expect_detection_method": "Combined"
   },
-  "schannel_test": {
-  "domains": ["copilot.microsoft.com"]
+  "kernel_file_monitor_test": {
+    "expected_provider": "EDD08927",
+    "expected_event_id": 12,
+    "max_event_rate_per_sec": 1000,
+    "require_zero_lost": true,
+    "max_cpu_pct": 5.0,
+    "max_memory_kb": 51200,
+    "expect_matched_min": 0,
+    "expect_dropped_min": 0
   }
 }
