@@ -13,7 +13,7 @@ SCHANNEL_RE = re.compile(
 class SchannelTest:
     name = "schannel_test"
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, agents=None):
         self.domains = cfg.get("domains", [])
         # domain -> first matching TLS event
         self.seen = {d: None for d in self.domains}
