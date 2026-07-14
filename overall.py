@@ -1,6 +1,7 @@
 import argparse, shutil, csv, re
 from pathlib import Path
 import json
+from datetime import datetime, timezone
 from tests.SAVR2SAVR7 import ConfidenceTest #01
 from tests.SAVR2SAVR14 import TcpStatsTest #08
 from tests.SAVR2SAVR13 import ScanLatencyTest #09
@@ -12,8 +13,8 @@ import subprocess
 
 TEST_CLASSES = [ConfidenceTest, TcpStatsTest, ScanLatencyTest, DnsCorrelationTest, SchannelTest]
 
-LOG_PATH = Path(r"C:\Windows\System32\config\systemprofile\AppData\Local\Cybersenz\SecureAiService\Logs\SecureAiService.log")
-
+LOG_PATH    = Path(r"C:\Windows\System32\config\systemprofile\AppData\Local\Cybersenz\SecureAiService\Logs\SecureAiService.log")
+AGENTS_PATH = Path(r"C:\ProgramData\Cybersenz\config\agents\detected_agents.json")
 
 def get_pids_by_name(proc_name):
     result = subprocess.run(
@@ -27,7 +28,7 @@ def get_pids_by_name(proc_name):
             pids.append(parts[1])
     return pids
 
-def build_tests(roster_path):
+def build_tests(roster_path, agents):
     if roster_path is None:
         return []
     cfg = json.loads(roster_path.read_text())
@@ -37,11 +38,12 @@ def build_tests(roster_path):
         tcp_cfg = cfg["tcp_stats_test"]
         for proc_name, domain in tcp_cfg.get("by_name", {}).items():
             pids = get_pids_by_name(proc_name)
+            print(f"looked up {proc_name} -> PIDs: {pids}")
             for pid in pids:
                 tcp_cfg["by_pid"][pid] = {"label": proc_name, "domain": domain}
-        tcp_cfg["by_name"] = {}   # clear so Test2 doesn't double-process them
+        tcp_cfg["by_name"] = {}
 
-    return [cls(cfg[cls.name]) for cls in TEST_CLASSES if cls.name in cfg]
+    return [cls(cfg[cls.name], agents) for cls in TEST_CLASSES if cls.name in cfg]
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -50,20 +52,17 @@ def parse_args():
     p.add_argument("--out", default="results.csv", type=Path)
     p.add_argument("--roster", type=Path,
                    help="JSON of expected subjects -> conf range")
-    # roster shape:
-    # {
-    #   "confidence_test": {
-    #     "by_name": { "chrome.exe": [0.0, 0.50] },
-    #     "by_pid":  { "7140": {"label": "python+openai", "range": [0.80, 1.0]},
-    #                  "7141": {"label": "python plain",  "range": [0.0, 0.50]} }
-    #   }
-    # }
     return p.parse_args()
 
 def snapshot(log_path: Path) -> Path:
-    # copy first so the growing file can't change under us
-    snap = log_path.with_suffix(".snapshot")
+    # write locally, not next to the protected log file
+    snap = Path("log.snapshot")
     shutil.copy2(log_path, snap)
+    return snap
+
+def snapshot_agents(agents_path: Path) -> Path:
+    snap = Path("agents.snapshot")
+    shutil.copy2(agents_path, snap)
     return snap
 
 timestamp_re = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})")
@@ -81,27 +80,48 @@ def load_window(snap: Path, start: str) -> list[str]:
         out.append(line)
     return out   # indexable array; multi-line matchers can peek forward
 
+def load_agents(agents_snap: Path, start: str) -> list[dict]:
+    # parse start as local naive datetime then treat as UTC for comparison
+    start_dt = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f").replace(
+        tzinfo=timezone.utc
+    )
+    data = json.loads(agents_snap.read_text(encoding="utf-8"))
+    active = []
+    for agent in data.get("agents", []):
+        last_seen = agent.get("last_seen", "")
+        if not last_seen:
+            continue
+        try:
+            ls_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if ls_dt >= start_dt:
+            active.append(agent)
+    return active
+
 def run(window, tests):
     for i, line in enumerate(window):
         for t in tests:
-            t.offer(line, i, window)   # test decides if it bites; can peek window[i+1:]
+            t.offer(line, i, window)
     for t in tests:
-        t.resolve()                    # the "surmising" step: score no-shows, etc.
+        t.resolve()
 
 def write_report(tests, out: Path):
-    with out.open("w", newline="") as f:
+    with out.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["test", "subject", "expected", "actual",
                     "result", "comments"])
         for t in tests:
-            for row in t.rows():       # each test emits its own rows
+            for row in t.rows():
                 w.writerow(row)
 
 def main():
     a = parse_args()
-    snap = snapshot(LOG_PATH)
-    window = load_window(snap, a.start)
-    tests = build_tests(a.roster)      # registry of test instances
+    snap        = snapshot(LOG_PATH)
+    agents_snap = snapshot_agents(AGENTS_PATH)
+    window      = load_window(snap, a.start)
+    agents      = load_agents(agents_snap, a.start)  # fixed: use load_agents not raw json.loads
+    tests       = build_tests(a.roster, agents)
     run(window, tests)
     write_report(tests, a.out)
 
