@@ -1,0 +1,20 @@
+{
+  "registration_test": {
+    "require_zero_agents": true
+  },
+  "heartbeat_payload_test": {
+    "required_fields": ["ip_address", "hostname", "device_token", "agent_count", "status", "last_scan_time"],
+    "forbidden_fields": [],
+    "stats_key": "sys_stats",
+    "stats_required": ["cpu_percent", "memory_mb", "disk_usage", "uptime"],
+    "last_scan_time_format": "epoch",
+    "require_response_success": true
+  },
+  "combined_fields_test": {
+    "event_files": ["Process-Data.txt", "LibraryAnalysis-Data.txt"],
+    "event_dir": null,
+    "required_fields": ["os_name", "os_version", "logged_in_user", "network_adapters", "route_table", "working_set_bytes", "thread_count", "handle_count", "process_start_time", "flow_id", "src_ip", "dst_ip", "bytes_out"],
+    "expect_event_type": "agent_detected",
+    "expect_detection_method": "Combined"
+  }
+}
