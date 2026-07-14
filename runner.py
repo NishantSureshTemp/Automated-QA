@@ -33,6 +33,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 TESTS_DIR = HERE / "mytests"
+
+# make `from mytests._common import ...` work no matter which directory
+# the runner is launched from
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
 DEFAULT_LOG = Path(r"C:\Windows\System32\config\systemprofile\AppData"
                    r"\Local\Cybersenz\SecureAiService\Logs\SecureAiService.log")
 
