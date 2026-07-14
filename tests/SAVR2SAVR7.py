@@ -8,7 +8,7 @@ CONF_RE = re.compile(
 class ConfidenceTest:
     name = "confidence_test"          # roster section key + registry gate
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, agents=None):
         self.by_name = cfg.get("by_name", {})     # {"chrome.exe": [lo, hi]}
         self.by_pid  = cfg.get("by_pid", {})      # {"7140": {"label":..., "range":[lo,hi]}}
         self.seen = {}                            # pid -> {"proc", "conf"}; first sighting wins
