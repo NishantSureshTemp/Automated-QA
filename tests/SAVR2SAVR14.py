@@ -15,7 +15,7 @@ TCP_RE = re.compile(
 class TcpStatsTest:
     name = "tcp_stats_test"
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, agents=None):
         self.by_name = cfg.get("by_name", {})  # {"fixture.exe": "httpbin.org"}
         self.by_pid  = cfg.get("by_pid", {})   # {"1234": {"label":..., "domain":...}}
         self.seen = {}                          # pid -> list of snapshots
