@@ -138,6 +138,25 @@ Look for the file-monitoring component only capturing activity from AI-related p
 - **Roster key:** `kernel_file_monitor_test`
 - **What it checks:** Confirms the monitoring session starts correctly with the expected provider, that session statistics are logged with zero lost events or buffers, that the event rate stays under the configured limit, that CPU and memory usage stay within budget, that matched (AI-relevant) and dropped (non-AI) file events meet configured expectations, and that the session only stops after the parent service begins shutting down.
 
+## Roster Configuration
+
+The roster (`roster.json`) controls which processes, domains, and fields each test asserts on. It is the single place to configure expected values for a given environment.
+
+Each test has its own top-level key in the roster. If a key is absent, that test is skipped entirely. An empty object `{}` enables the test with default settings.
+
+`setup.py` automatically patches `tcp_stats_test.by_pid` on every run with the live httpbin fixture PID — do not manually edit that field as it will be overwritten.
+
+Fields that are environment-specific and may need updating between VMs or builds:
+
+- `confidence_test.config_path` — path to `config.json` on the target machine
+- `confidence_test.expected_agents` — processes expected to be running and detected; add or remove entries to match what is installed
+- `tcp_stats_test.by_pid` — managed automatically by `setup.py`
+- `dns_correlation_test.domains` — domains to verify DNS+TCP correlation for; `httpbin.org` requires the fixture, `chatgpt.com` resolves automatically from the service's DNS cache refresh
+- `schannel_test.domains` — TLS domains to verify; must be reachable via PowerShell/.NET (not Chrome/Edge)
+- `heartbeat_payload_test` — required fields and stats keys; update if the heartbeat payload schema changes between builds
+- `kernel_file_monitor_test` — provider GUID and event ID; update if the ETW provider changes between builds
+- `module_enum_test.expected_agents` — processes to check for library enumeration. Set `expected_libraries` to `[]` for native binaries like ollama.exe. For python+torch, list expected DLL names — entries will produce NOT_DETECTED until SAVR-16 is fixed.
+
 ## Reading the Results
 
 Each row in the results output gets one of these verdicts:
