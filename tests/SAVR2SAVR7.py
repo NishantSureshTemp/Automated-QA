@@ -1,75 +1,286 @@
 import re
+import json
+from pathlib import Path
 
 CONF_RE = re.compile(
-    r"\[SCANNER\]\s+Trusted AI process:\s*(?P<proc>\S+\.exe)\s*"
-    r"\(PID\s+(?P<pid>\d+),.*?conf\s+(?P<conf>[0-9.]+)\)",
+    r"\[SCANNER\]\s+Trusted AI process:\s+(?P<name>\S+)\s+\(PID\s+(?P<pid>\d+),"
+    r".*?conf\s+(?P<conf>[0-9.]+)\)"
 )
 
 class ConfidenceTest:
-    name = "confidence_test"          # roster section key + registry gate
+    name = "confidence_test"
 
     def __init__(self, cfg, agents=None):
-        self.by_name = cfg.get("by_name", {})     # {"chrome.exe": [lo, hi]}
-        self.by_pid  = cfg.get("by_pid", {})      # {"7140": {"label":..., "range":[lo,hi]}}
-        self.seen = {}                            # pid -> {"proc", "conf"}; first sighting wins
+        self.agents = agents or []
+        self.config_path = Path(cfg.get("config_path", ""))
+        self.expected_agents = cfg.get("expected_agents", [])
+        self.library_processes = cfg.get("library_processes", [])
 
-    # --- per-line matcher (runs during the main loop) ---
+        # load config.json
+        self.policy = {}
+        self.exclusions = []
+        self.min_threshold = 0.6
+        self.whitelist = []
+        if self.config_path.exists():
+            try:
+                policy = json.loads(self.config_path.read_text(encoding="utf-8"))
+                self.policy = policy
+                self.exclusions = [
+                    p.lower() for p in
+                    policy.get("exclusions", {}).get("system_processes", [])
+                ]
+                self.min_threshold = policy.get(
+                    "confidence_modifiers", {}
+                ).get("minimum_threshold", 0.6)
+                self.whitelist = policy.get(
+                    "whitelists", {}
+                ).get("legitimate_ai_processes", [])
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # per process name -> list of (pid, conf) seen in log
+        self.log_hits = {}
+
     def offer(self, line, i, window):
         m = CONF_RE.search(line)
         if not m:
             return
-        pid = m.group("pid")
-        if pid in self.seen:          # same PID already counted -> ignore repeat scans
-            return
-        self.seen[pid] = {"proc": m.group("proc"), "conf": float(m.group("conf"))}
+        name = m.group("name")
+        pid  = m.group("pid")
+        conf = float(m.group("conf"))
+        if name not in self.log_hits:
+            self.log_hits[name] = []
+        # dedupe by pid -- keep highest conf seen for this pid
+        existing_pids = [p for p, c in self.log_hits[name]]
+        if pid not in existing_pids:
+            self.log_hits[name].append((pid, conf))
 
-    # --- scoring after EOF (the "surmising" step) ---
+    def _whitelist_entry(self, process_name):
+        name_lower = process_name.lower().replace(".exe", "")
+        for entry in self.whitelist:
+            for pattern in entry.get("patterns", []):
+                if re.search(pattern, name_lower, re.IGNORECASE):
+                    return entry
+        return None
+
     def resolve(self):
-        self.results = []             # (subject, expected, actual, result, comment)
-        matched_names = set()
-        seen_pids = set(self.seen)
+        self.results = []
 
-        for pid, info in self.seen.items():
-            conf, proc = info["conf"], info["proc"]
+        # --- Part 1: log confidence checks for expected_agents ---
+        for ea in self.expected_agents:
+            pname  = ea["process_name"]
+            lo, hi = ea["confidence_range"]
+            expect_stype = ea.get("expect_service_type")
 
-            if pid in self.by_pid:                        # by-pid wins (more specific)
-                entry = self.by_pid[pid]
-                lo, hi = entry["range"]
-                res = "PASS" if lo <= conf <= hi else "FAIL"
+            hits = self.log_hits.get(pname, [])
+            if not hits:
                 self.results.append((
-                    f'{proc} (PID {pid}, {entry["label"]})',
-                    f"{lo}-{hi}", conf, res,
-                    "" if res == "PASS" else "confidence outside expected range",
+                    f"{pname} (log)",
+                    f"conf {lo}-{hi}",
+                    "", "NOT_DETECTED",
+                    f"no SCANNER confidence line for {pname} in run window",
+                ))
+                continue
+
+            # use best (highest) confidence seen
+            best_pid, best_conf = max(hits, key=lambda x: x[1])
+            ok = lo <= best_conf <= hi
+            self.results.append((
+                f"{pname} (PID {best_pid}) (log)",
+                f"conf {lo}-{hi}",
+                str(best_conf),
+                "PASS" if ok else "FAIL",
+                "" if ok else
+                f"confidence {best_conf} outside expected range {lo}-{hi}",
+            ))
+
+        # --- Part 2: JSON persistence checks for expected_agents ---
+        for ea in self.expected_agents:
+            pname        = ea["process_name"]
+            lo, hi       = ea["confidence_range"]
+            expect_stype = ea.get("expect_service_type")
+
+            json_entry = next(
+                (a for a in self.agents
+                 if a.get("process_name", "").lower() == pname.lower()),
+                None
+            )
+
+            if json_entry is None:
+                # check if it was seen in log -- if yes, persistence is the bug
+                seen_in_log = pname in self.log_hits
+                self.results.append((
+                    f"{pname} (JSON)",
+                    "present in detected_agents.json",
+                    "absent",
+                    "FAIL" if seen_in_log else "NOT_DETECTED",
+                    f"detected in log (conf {max(c for p,c in self.log_hits[pname]):.2f}) "
+                    f"but not persisted to detected_agents.json"
+                    if seen_in_log else
+                    f"{pname} not seen in log or JSON this window",
+                ))
+                continue
+
+            failures = []
+            conf = json_entry.get("confidence", 0)
+            if not (lo <= conf <= hi):
+                failures.append(f"confidence {conf:.2f} outside {lo}-{hi}")
+
+            if expect_stype:
+                actual_stype = json_entry.get("service_type", "")
+                if actual_stype != expect_stype:
+                    failures.append(
+                        f"service_type='{actual_stype}' expected '{expect_stype}'"
+                    )
+
+            # cross-check against whitelist
+            wl = self._whitelist_entry(pname)
+            if wl:
+                wl_conf = wl.get("confidence", 0)
+                if abs(conf - wl_conf) > 0.05:
+                    failures.append(
+                        f"JSON confidence {conf:.2f} diverges from "
+                        f"whitelist configured value {wl_conf}"
+                    )
+
+            actual_str = (
+                f"conf={conf:.2f} service_type={json_entry.get('service_type')}"
+            )
+            self.results.append((
+                f"{pname} (JSON)",
+                f"conf {lo}-{hi}, service_type={expect_stype}",
+                actual_str,
+                "PASS" if not failures else "FAIL",
+                "; ".join(failures),
+            ))
+
+        # --- Part 3: library_processes ---
+        for lp in self.library_processes:
+            pname  = lp["process_name"]
+            lo, hi = lp["confidence_range"]
+            note   = lp.get("note", "")
+
+            hits = self.log_hits.get(pname, [])
+            if not hits:
+                self.results.append((
+                    f"{pname} library detection (log)",
+                    f"conf >= {lo}",
+                    "", "NOT_DETECTED",
+                    f"no SCANNER line for {pname} -- "
+                    f"process not running or not detected",
+                ))
+            else:
+                best_pid, best_conf = max(hits, key=lambda x: x[1])
+                ok = lo <= best_conf <= hi
+                self.results.append((
+                    f"{pname} (PID {best_pid}) library detection (log)",
+                    f"conf {lo}-{hi}",
+                    str(best_conf),
+                    "PASS" if ok else "FAIL",
+                    "" if ok else
+                    f"confidence {best_conf} outside expected range {lo}-{hi}",
                 ))
 
-            elif proc in self.by_name:                    # else fall back to name
-                lo, hi = self.by_name[proc]
-                res = "PASS" if lo <= conf <= hi else "FAIL"
-                matched_names.add(proc)
+            json_entry = next(
+                (a for a in self.agents
+                 if a.get("process_name", "").lower() == pname.lower()),
+                None
+            )
+            if json_entry is None:
                 self.results.append((
-                    f"{proc} (PID {pid})",
-                    f"{lo}-{hi}", conf, res,
-                    "" if res == "PASS" else "confidence outside expected range",
+                    f"{pname} library detection (JSON)",
+                    "present in detected_agents.json",
+                    "absent",
+                    "NOT_DETECTED",
+                    f"not in detected_agents.json -- {note}" if note
+                    else f"not in detected_agents.json",
+                ))
+            else:
+                conf = json_entry.get("confidence", 0)
+                libs = json_entry.get("loaded_ai_libraries", [])
+                ok   = lo <= conf <= hi and len(libs) > 0
+                self.results.append((
+                    f"{pname} library detection (JSON)",
+                    f"conf {lo}-{hi}, loaded_ai_libraries non-empty",
+                    f"conf={conf:.2f} libraries={libs}",
+                    "PASS" if ok else "FAIL",
+                    "" if ok else
+                    "loaded_ai_libraries empty (SAVR-16)" if not libs
+                    else f"confidence {conf:.2f} outside {lo}-{hi}",
                 ))
 
-        # roster entries that never showed up in the window
-        for pid, entry in self.by_pid.items():
-            if pid not in seen_pids:
-                lo, hi = entry["range"]
+        # --- Part 4: exclusions check ---
+        if self.exclusions:
+            unexpected = [
+                a for a in self.agents
+                if a.get("process_name", "").lower() in self.exclusions
+            ]
+            if unexpected:
+                for a in unexpected:
+                    self.results.append((
+                        f"{a['process_name']} (JSON exclusion)",
+                        "must not appear in detected_agents.json",
+                        f"present (conf={a.get('confidence', '?')})",
+                        "FAIL",
+                        f"excluded process found in detected_agents.json "
+                        f"-- confidence scorer or exclusion list not applied",
+                    ))
+            else:
                 self.results.append((
-                    f'PID {pid} ({entry["label"]})',
-                    f"{lo}-{hi}", "", "NOT_DETECTED",
-                    "no SCANNER confidence line for this PID in the run window",
-                ))
-        for proc, rng in self.by_name.items():
-            if proc not in matched_names:
-                lo, hi = rng
-                self.results.append((
-                    proc, f"{lo}-{hi}", "", "NOT_DETECTED",
-                    "no SCANNER confidence line for this name in the run window",
+                    "exclusions check",
+                    "no system_processes in detected_agents.json",
+                    f"0 excluded processes found ({len(self.exclusions)} checked)",
+                    "PASS",
+                    "",
                 ))
 
-    # --- emit CSV rows (runner adds nothing, just writes them) ---
+        # --- Part 5: minimum threshold check ---
+        below_threshold = [
+            a for a in self.agents
+            if a.get("confidence", 1.0) < self.min_threshold
+        ]
+        if below_threshold:
+            for a in below_threshold:
+                self.results.append((
+                    f"{a['process_name']} (threshold)",
+                    f"confidence >= {self.min_threshold}",
+                    f"{a.get('confidence', '?')}",
+                    "FAIL",
+                    f"entry below minimum_confidence_threshold "
+                    f"{self.min_threshold} in detected_agents.json",
+                ))
+        else:
+            self.results.append((
+                "minimum threshold check",
+                f"all JSON entries >= {self.min_threshold}",
+                f"all {len(self.agents)} agent(s) above threshold",
+                "PASS" if self.agents else "INCONCLUSIVE",
+                "" if self.agents else "no agents in window to check",
+            ))
+
+        # --- Part 6: unexpected JSON entries ---
+        expected_names = {
+            ea["process_name"].lower() for ea in self.expected_agents
+        } | {
+            lp["process_name"].lower() for lp in self.library_processes
+        }
+        unexpected_json = [
+            a for a in self.agents
+            if a.get("process_name", "").lower() not in expected_names
+            and a.get("process_name", "").lower() not in self.exclusions
+        ]
+        if unexpected_json:
+            for a in unexpected_json:
+                self.results.append((
+                    f"{a['process_name']} (unexpected JSON entry)",
+                    "not in expected_agents or library_processes",
+                    f"conf={a.get('confidence', '?')} "
+                    f"service_type={a.get('service_type', '?')}",
+                    "FAIL",
+                    "unexpected process in detected_agents.json -- "
+                    "verify this is a legitimate detection",
+                ))
+
     def rows(self):
         for subject, expected, actual, result, comment in self.results:
             yield (self.name, subject, expected, actual, result, comment)
