@@ -1,31 +1,50 @@
 # Anomaly Detection Engine — Test Case Documentation
 
-## Prerequisites / Fixtures
+## Setup And Running the Suite
 
-Before running the suite, ensure the following are in place:
+### Prerequisites
+- SecureAiService must be installed and running
+- Python 3.x with `requests` and `torch` packages installed
+- PowerShell available (for Schannel fixture)
+- Run as Administrator (required for service restart via `net stop/start`)
 
-### Always Required
-- **SecureAiService** must be running (the service logs and detected_agents.json are only produced while it runs)
-- **M365Copilot.exe** — no action needed, detected automatically if installed
+### Automated Setup
+The suite is fully automated via `setup.py`. A single command handles service restart, fixture launch, roster patching, and suite execution: python setup.py
 
-### Per-Run Setup
-Run these steps in order before invoking `overall.py`:
+`setup.py` performs the following steps in order:
 
-1. **httpbin fixture** (required for tcp_stats_test and dns_correlation_test)
-   Launch in a terminal and keep alive:
-   
-```python -c "import requests, time; [requests.get('https://httpbin.org/get') or time.sleep(30) for _ in range(10)]"```
+1. Records the start timestamp
+2. Restarts SecureAiService (`net stop` then `net start`) to exercise the registration sequence and ETW session startup
+3. Launches the httpbin fixture as a background process and patches `roster.json` with the live PID
+4. Launches the python+torch fixture as a background process for library detection and module enumeration tests
+5. Waits 180 seconds for scanner poll cycles, registration attempts, DNS cache refresh, and heartbeat to fire
+6. Runs the Schannel fixture via PowerShell
+7. Waits 20 seconds for the TLS event to appear in the log
+8. Invokes `overall.py` with the recorded start timestamp
+9. Terminates fixtures and cleans up
 
-   Note the PID printed at launch and update `roster.json` under `tcp_stats_test.by_pid`.
+Total runtime is approximately 200 seconds.
 
-3. **Schannel fixture** (required for schannel_test)
-   Run in PowerShell — do NOT use Chrome or Edge:
+### Manual Run
+If running `overall.py` directly without `setup.py`:
+
+1. Launch httpbin fixture and note the PID:
+python -c "import requests, time, os; print(f'PID: {os.getpid()}', flush=True); [requests.get('https://httpbin.org/get') or time.sleep(30) for _ in range(20)]"
+2. Launch python+torch fixture:
+python -c "import torch, time; time.sleep(300)"
+3. Update `roster.json` `tcp_stats_test.by_pid` with the httpbin PID
+4. Run Schannel fixture in PowerShell:
 ```powershell
    Invoke-WebRequest -Uri "https://copilot.microsoft.com" -UseBasicParsing
 ```
-   Run this shortly before invoking the suite so the log line falls within the window.
+5. Wait 60 seconds then run:
+python overall.py --start "YYYY-MM-DD HH:MM:SS.000" --roster roster.json --out results.csv
+   Set `--start` to just before you launched your fixtures.
 
-3. **Wait 60 seconds** after launching fixtures before running the suite, to allow at least two scanner poll cycles.
+### Known Environment Limitations
+- **License limit exceeded** — the controller is rejecting registration with `"License limit exceeded"`. This blocks `registration_test` auth milestones and `heartbeat_payload_test` entirely until resolved on the controller side.
+- **kernel_file_monitor_test statistics** — stats, CPU, memory, and stop rows only appear when a service shutdown occurs within the run window. The current setup captures session startup (PASS) but not shutdown. These rows will show NOT_DETECTED on normal runs.
+
 
 ### Run Command
 python overall.py --start "YYYY-MM-DD HH:MM:SS.000" --roster roster.json --out results.csv
@@ -34,7 +53,7 @@ Set `--start` to just before you launched your fixtures.
 
 ## Test Cases Covered
 
-### AI Module Enumeration (SAVR-16 / TC-DET-11)
+### AI Module Enumeration (SAVR-6)
 Look for each detected AI process having its loaded DLL libraries correctly enumerated and recorded in the agent database.
 
 - **File:** `tests/SAVR2SAVR11.py`
