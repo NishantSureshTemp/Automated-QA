@@ -35,11 +35,20 @@ Set `--start` to just before you launched your fixtures.
 ## Test Cases Covered
 
 ### AI Process Confidence Scoring (SAVR-7)
-Look for whether known AI programs get high confidence scores and non-AI programs get low ones.
+Look for whether known AI programs get correct confidence scores, are persisted to the agent database, and that non-AI system processes are correctly excluded.
 
 - **File:** `tests/SAVR2SAVR7.py`
 - **Roster key:** `confidence_test`
-- **What it checks:** Matches each detected process against a roster of expected confidence ranges, either by process name or by PID. Original acceptance criteria: a known AI coding assistant (e.g. Cursor.exe) should score ≥ 0.9; a plain browser process with no AI activity (e.g. chrome.exe) should score < 0.5; a Python process with an AI library imported (e.g. python.exe + openai) should score ≥ 0.8.
+- **Config dependency:** reads `config.json` at runtime for whitelist 
+  confidence values, service types, and system process exclusions
+- **What it checks:**
+  - For each process in `expected_agents`: verifies the scanner assigns a confidence score within the configured range, and that the entry is correctly persisted to `detected_agents.json` with the right confidence and `service_type`
+  - For each process in `library_processes`: verifies the scanner detects the process via LibraryAnalysis and persists it to `detected_agents.json` with `loaded_ai_libraries` populated
+  - Cross-checks each JSON entry's confidence against the whitelist configured value in `config.json`
+  - Verifies no processes from `exclusions.system_processes` in `config.json` appear in `detected_agents.json`
+  - Verifies all JSON entries are above `minimum_confidence_threshold` (0.6) from `config.json`
+  - Flags any unexpected entries in `detected_agents.json` not covered by the roster
+- **Known limitations:** `library_processes` entries will produce NOT_DETECTED until SAVR-16 (ETW kernel file monitor) is fixed, as LibraryAnalysis depends on file event capture to populate `loaded_ai_libraries`
 
 ### Scan Speed / Responsiveness (SAVR-13)
 Look for the engine reacting to a new AI process within 50ms, instead of waiting for its next scheduled scan.
