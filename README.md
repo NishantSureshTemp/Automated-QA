@@ -34,6 +34,19 @@ Set `--start` to just before you launched your fixtures.
 
 ## Test Cases Covered
 
+### AI Module Enumeration (SAVR-16 / TC-DET-11)
+Look for each detected AI process having its loaded DLL libraries correctly enumerated and recorded in the agent database.
+
+- **File:** `tests/SAVR2SAVR11.py`
+- **Roster key:** `module_enum_test`
+- **What it checks:**
+  - For each process in `expected_agents`: verifies an entry exists in `detected_agents.json` and that `loaded_ai_libraries` contains the expected library names
+  - For processes with no expected libraries (e.g. native binaries like ollama.exe): verifies the field is present and notes any libraries found as informational.
+  - For processes with expected libraries (e.g. python+torch): verifies `detection_method` is `LibraryAnalysis`, confirming the process was detected via file monitoring rather than name matching alone
+  - Flags any agent in `detected_agents.json` with a non-empty `loaded_ai_libraries` that is not covered by the roster
+- **Known limitations:** python.exe entries will produce NOT_DETECTED until SAVR-16 (ETW kernel file monitor) is fixed — the monitor session starts correctly (provider EDD08927, event ID 12) but `BuffersWritten=0` means no file events are captured, so LibraryAnalysis never fires and python.exe is never written to `detected_agents.json`
+- **Fixture required:** run `python -c "import torch; time.sleep(300)"` before invoking the suite so python.exe is alive during the scanner poll cycle
+
 ### AI Process Confidence Scoring (SAVR-7)
 Look for whether known AI programs get correct confidence scores, are persisted to the agent database, and that non-AI system processes are correctly excluded.
 
