@@ -1,5 +1,37 @@
 # Anomaly Detection Engine — Test Case Documentation
 
+## Prerequisites / Fixtures
+
+Before running the suite, ensure the following are in place:
+
+### Always Required
+- **SecureAiService** must be running (the service logs and detected_agents.json are only produced while it runs)
+- **M365Copilot.exe** — no action needed, detected automatically if installed
+
+### Per-Run Setup
+Run these steps in order before invoking `overall.py`:
+
+1. **httpbin fixture** (required for tcp_stats_test and dns_correlation_test)
+   Launch in a terminal and keep alive:
+   
+```python -c "import requests, time; [requests.get('https://httpbin.org/get') or time.sleep(30) for _ in range(10)]"```
+
+   Note the PID printed at launch and update `roster.json` under `tcp_stats_test.by_pid`.
+
+3. **Schannel fixture** (required for schannel_test)
+   Run in PowerShell — do NOT use Chrome or Edge:
+```powershell
+   Invoke-WebRequest -Uri "https://copilot.microsoft.com" -UseBasicParsing
+```
+   Run this shortly before invoking the suite so the log line falls within the window.
+
+3. **Wait 60 seconds** after launching fixtures before running the suite, to allow at least two scanner poll cycles.
+
+### Run Command
+python overall.py --start "YYYY-MM-DD HH:MM:SS.000" --roster roster.json --out results.csv
+Set `--start` to just before you launched your fixtures.
+
+
 ## Test Cases Covered
 
 ### AI Process Confidence Scoring (SAVR-7)
