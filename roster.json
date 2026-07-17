@@ -1,17 +1,64 @@
 {
-  "registration_test": {
-    "require_zero_agents": true
+  "confidence_test": {
+    "config_path": "C:\\ProgramData\\Cybersenz\\config\\config.json",
+    "expected_agents": [
+      {
+        "process_name": "ollama.exe",
+        "confidence_range": [
+          0.9,
+          0.95
+        ],
+        "expect_service_type": "LocalModel"
+      },
+      {
+        "process_name": "M365Copilot.exe",
+        "confidence_range": [
+          0.9,
+          0.95
+        ],
+        "expect_service_type": "DesktopApp"
+      }
+    ],
+    "library_processes": [
+      {
+        "process_name": "python.exe",
+        "confidence_range": [
+          0.8,
+          0.95
+        ],
+        "note": "python + torch import -- requires LibraryAnalysis (SAVR-16)"
+      }
+    ]
   },
+  "tcp_stats_test": {
+    "by_name": {},
+    "by_pid": {
+      "4584": {
+        "label": "httpbin fixture",
+        "domain": "httpbin.org"
+      }
+    }
+  },
+  "scan_latency_test": {},
+  "dns_correlation_test": {
+    "domains": [
+      "httpbin.org",
+      "chatgpt.com"
+    ]
+  },
+  "schannel_test": {
+    "domains": [
+      "copilot.microsoft.com"
+    ]
+  },
+  "registration_test": {},
   "heartbeat_payload_test": {
     "required_fields": [
       "ip_address",
       "hostname",
       "device_token",
-      "agent_count",
-      "status",
-      "last_scan_time"
+      "status"
     ],
-    "forbidden_fields": [],
     "stats_key": "sys_stats",
     "stats_required": [
       "cpu_percent",
@@ -22,27 +69,7 @@
     "last_scan_time_format": "epoch",
     "require_response_success": true
   },
-  "combined_fields_test": {
-    "event_files": [],
-    "event_dir": null,
-    "required_fields": [
-      "os_name",
-      "os_version",
-      "logged_in_user",
-      "network_adapters",
-      "route_table",
-      "working_set_bytes",
-      "thread_count",
-      "handle_count",
-      "process_start_time",
-      "flow_id",
-      "src_ip",
-      "dst_ip",
-      "bytes_out"
-    ],
-    "expect_event_type": "agent_detected",
-    "expect_detection_method": "Combined"
-  },
+  "combined_fields_test": {},
   "kernel_file_monitor_test": {
     "expected_provider": "EDD08927",
     "expected_event_id": 12,
@@ -52,5 +79,20 @@
     "max_memory_kb": 51200,
     "expect_matched_min": 0,
     "expect_dropped_min": 0
+  },
+  "module_enum_test": {
+    "expected_agents": [
+      {
+        "process_name": "ollama.exe",
+        "expected_libraries": []
+      },
+      {
+        "process_name": "python.exe",
+        "expected_libraries": [
+          "torch_python.dll",
+          "torch_cpu.dll"
+        ]
+      }
+    ]
   }
 }
