@@ -1,0 +1,32 @@
+test,subject,expected,actual,result,comments
+confidence_test,ollama.exe (PID 10536) (log),conf 0.9-0.95,0.95,PASS,
+confidence_test,M365Copilot.exe (PID 9396) (log),conf 0.9-0.95,0.95,PASS,
+confidence_test,ollama.exe (JSON),"conf 0.9-0.95, service_type=LocalModel",conf=0.95 service_type=LocalModel,PASS,
+confidence_test,M365Copilot.exe (JSON),present in detected_agents.json,absent,FAIL,detected in log (conf 0.95) but not persisted to detected_agents.json
+confidence_test,python.exe (PID 6332) library detection (log),conf 0.8-0.95,0.9,PASS,
+confidence_test,python.exe library detection (JSON),present in detected_agents.json,absent,NOT_DETECTED,not in detected_agents.json -- python + torch import -- requires LibraryAnalysis (SAVR-16)
+confidence_test,exclusions check,no system_processes in detected_agents.json,0 excluded processes found (36 checked),PASS,
+confidence_test,minimum threshold check,all JSON entries >= 0.5,all 1 agent(s) above threshold,PASS,
+tcp_stats_test,PID 4584 (httpbin fixture) -> httpbin.org,"bytes_out>0, bytes_in>0, rtt>0",bytes_out=823 bytes_in=4320 rtt=0ms,FAIL,bytes non-zero on 2/6 snapshot(s) but rtt=0ms on all. RTT not being computed (known defect)
+scan_latency_test,scan interval,"short gaps present, no poll-range gaps","7 gap(s): 0 short (<5s), 7 poll-range (25-40s), 0 anomalous (>40s), 0 other (5-25s)",FAIL,poll loop -- no event-driven scans detected -- 8 scans observed
+scan_latency_test,ETW process-added to scan latency,< 50ms,"24879ms (worst case, PID 4584)",FAIL,process \Device\HarddiskVolume3\Users\Nishant Suresh\AppData\Local\Python\pythoncore-3.14-64\python.exe (PID 4584) added at 01:54:48.346 -- next scan fired 24.9s later (event-driven dispatch not implemented)
+scan_latency_test,event-driven dispatch markers,scan triggered within 50ms of ETW event,none found,FAIL,2 AI process ETW event(s) received but no event-driven scan markers found in log -- scanner appears to be ignoring ETW events for dispatch
+dns_correlation_test,httpbin.org,DNS status=0 + TCP source=dns_etw,DNS answers=4 transport=DoH latency=991ms -- TCP domain=httpbin.org source=dns_etw url=https://httpbin.org,PASS,
+dns_correlation_test,chatgpt.com,DNS status=0 + TCP source=dns_etw,DNS captured (answers=2 transport=UDP latency=0ms) but no subsequent TCP connect with source=dns_etw found,PARTIAL,DNS resolution captured at line 318 but flow correlation missing -- IP-to-domain cache lookup not working for this domain
+schannel_test,copilot.microsoft.com,sni + ver + cipher present,pid=672 sni=copilot.microsoft.com ver=TLS 1.2 cipher=0xc02f kex=?(255),PARTIAL,kex unresolved: ?(255) (known defect SAVR-15); alpn not captured (known defect SAVR-15)
+registration_test,registration sequence,all 6 milestones,"missing: auth_request, auth_response, heartbeat_ok",NOT_DETECTED,registration/auth sequence not (fully) in run window; start the window at service install/restart to exercise it
+registration_test,registration accepted,success=true,false/unparsed,FAIL,server did not confirm success
+registration_test,authentication accepted,success=true,not seen,NOT_DETECTED,response line not in run window
+registration_test,zero-agent precondition,0 AI processes in all scans before registration,"2 scan(s), max count 1",FAIL,an AI process was detected before registration; this run does not exercise Issue 1
+heartbeat_payload_test,heartbeat request,parseable JSON payload,,NOT_DETECTED,no parseable Heartbeat Request data line in the run window
+combined_fields_test,agent: ollama.exe (2026-07-17T08:58:16.804293Z),event_type=agent_detected,None,FAIL,unexpected event type
+combined_fields_test,agent: ollama.exe (2026-07-17T08:58:16.804293Z),13 combined fields non-null,"missing/null: os_name, os_version, logged_in_user, network_adapters, route_table, working_set_bytes, thread_count, handle_count, process_start_time, flow_id, src_ip, dst_ip, bytes_out",FAIL,process/flow fields absent from combined event (Issue 3 regression)
+kernel_file_monitor_test,session created,'SecureAIKernelFileMonitor' started,seen,PASS,
+kernel_file_monitor_test,provider GUID,EDD08927,EDD08927,PASS,
+kernel_file_monitor_test,subscribed event id,12,12,PASS,
+kernel_file_monitor_test,statistics block,all 7 counters logged,"missing: Events Processed, Events Received, Dropped (PID filter), Matched (path+ext), Buffers Written, Events Lost, RT Buffers Lost",NOT_DETECTED,stats are logged at monitor stop; make sure the window includes a service stop/restart
+kernel_file_monitor_test,CPU usage,<= 5.0%,not logged,NOT_DETECTED,CPU Usage line not in run window
+kernel_file_monitor_test,memory working set,<= 51200 KB,not logged,NOT_DETECTED,Memory Working Set line not in run window
+kernel_file_monitor_test,monitor stop,[ETW_FILE_MONITOR] Stopped,not seen,NOT_DETECTED,no Stopped line; include a service stop in the window
+module_enum_test,ollama.exe libraries,loaded_ai_libraries field present,loaded_ai_libraries=[] detection_method=ProcessAnalysis,PASS,
+module_enum_test,python.exe libraries,"present in detected_agents.json with libraries=['torch_python.dll', 'torch_cpu.dll']",absent,NOT_DETECTED,python.exe not in detected_agents.json this window -- process not detected or LibraryAnalysis not firing (SAVR-16)
