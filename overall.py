@@ -1,17 +1,22 @@
 import argparse, shutil, csv, re
 from pathlib import Path
 import json
-from datetime import datetime, timezone
+import subprocess
 from tests.SAVR2SAVR7 import ConfidenceTest #01
 from tests.SAVR2SAVR14 import TcpStatsTest #08
 from tests.SAVR2SAVR13 import ScanLatencyTest #09
 from tests.SAVR2SAVR18 import DnsCorrelationTest #05
 from tests.SAVR2SAVR15 import SchannelTest #07
-import subprocess
+from tests.SAVR2SAVR43 import RegistrationTest, HeartbeatPayloadTest, CombinedFieldsTest
+from tests.SAVR2SAVR16 import KernelFileMonitorTest
+from tests.SAVR2SAVR6 import ModuleEnumTest
+from datetime import datetime, timezone
 
 #python overall.py --start "2026-07-02 16:00:00.049" --roster roster.json --out results.csv
 
-TEST_CLASSES = [ConfidenceTest, TcpStatsTest, ScanLatencyTest, DnsCorrelationTest, SchannelTest]
+TEST_CLASSES = [ConfidenceTest, TcpStatsTest, ScanLatencyTest, DnsCorrelationTest, 
+SchannelTest, RegistrationTest, HeartbeatPayloadTest, CombinedFieldsTest, 
+KernelFileMonitorTest, ModuleEnumTest]
 
 LOG_PATH    = Path(r"C:\Windows\System32\config\systemprofile\AppData\Local\Cybersenz\SecureAiService\Logs\SecureAiService.log")
 AGENTS_PATH = Path(r"C:\ProgramData\Cybersenz\config\agents\detected_agents.json")
