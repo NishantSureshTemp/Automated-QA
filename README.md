@@ -45,12 +45,6 @@ python overall.py --start "YYYY-MM-DD HH:MM:SS.000" --roster roster.json --out r
 - **License limit exceeded** — the controller is rejecting registration with `"License limit exceeded"`. This blocks `registration_test` auth milestones and `heartbeat_payload_test` entirely until resolved on the controller side.
 - **kernel_file_monitor_test statistics** — stats, CPU, memory, and stop rows only appear when a service shutdown occurs within the run window. The current setup captures session startup (PASS) but not shutdown. These rows will show NOT_DETECTED on normal runs.
 
-
-### Run Command
-python overall.py --start "YYYY-MM-DD HH:MM:SS.000" --roster roster.json --out results.csv
-Set `--start` to just before you launched your fixtures.
-
-
 ## Test Cases Covered
 
 ### AI Module Enumeration (SAVR-6)
