@@ -20,6 +20,7 @@ KernelFileMonitorTest, ModuleEnumTest]
 
 LOG_PATH    = Path(r"C:\Windows\System32\config\systemprofile\AppData\Local\Cybersenz\SecureAiService\Logs\SecureAiService.log")
 AGENTS_PATH = Path(r"C:\ProgramData\Cybersenz\config\agents\detected_agents.json")
+SYSINFO_PATH = Path(r"C:\ProgramData\Cybersenz\config\sysinfo.jsonl")
 
 def get_pids_by_name(proc_name):
     result = subprocess.run(
@@ -33,7 +34,7 @@ def get_pids_by_name(proc_name):
             pids.append(parts[1])
     return pids
 
-def build_tests(roster_path, agents):
+def build_tests(roster_path, agents, sysinfo):
     if roster_path is None:
         return []
     cfg = json.loads(roster_path.read_text())
@@ -48,7 +49,7 @@ def build_tests(roster_path, agents):
                 tcp_cfg["by_pid"][pid] = {"label": proc_name, "domain": domain}
         tcp_cfg["by_name"] = {}
 
-    return [cls(cfg[cls.name], agents) for cls in TEST_CLASSES if cls.name in cfg]
+    return [cls(cfg[cls.name], agents, sysinfo) for cls in TEST_CLASSES if cls.name in cfg]
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -104,6 +105,29 @@ def load_agents(agents_snap: Path, start: str) -> list[dict]:
             active.append(agent)
     return active
 
+def load_sysinfo(sysinfo_path: Path) -> dict:
+    with sysinfo_path.open("rb") as f:
+        f.seek(0, 2)          # seek to end of file
+        pos = f.tell()
+        
+        # walk backwards skipping any trailing newlines
+        while pos > 0:
+            pos -= 1
+            f.seek(pos)
+            if f.read(1) not in (b"\n", b"\r", b" "):
+                break
+        
+        # now find the start of this last line
+        while pos > 0:
+            pos -= 1
+            f.seek(pos)
+            if f.read(1) in (b"\n", b"\r"):
+                break
+        
+        last_line = f.readline().decode("utf-8").strip()
+    
+    return json.loads(last_line) if last_line else {}
+
 def run(window, tests):
     for i, line in enumerate(window):
         for t in tests:
@@ -126,7 +150,8 @@ def main():
     agents_snap = snapshot_agents(AGENTS_PATH)
     window      = load_window(snap, a.start)
     agents      = load_agents(agents_snap, a.start)  # fixed: use load_agents not raw json.loads
-    tests       = build_tests(a.roster, agents)
+    sysinfo = load_sysinfo(SYSINFO_PATH)
+    tests       = build_tests(a.roster, agents, sysinfo)
     run(window, tests)
     write_report(tests, a.out)
 
