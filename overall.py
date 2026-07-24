@@ -2,21 +2,28 @@ import argparse, shutil, csv, re
 from pathlib import Path
 import json
 import subprocess
-from tests.SAVR2SAVR7 import ConfidenceTest #01
-from tests.SAVR2SAVR14 import TcpStatsTest #08
-from tests.SAVR2SAVR13 import ScanLatencyTest #09
-from tests.SAVR2SAVR18 import DnsCorrelationTest #05
-from tests.SAVR2SAVR15 import SchannelTest #07
-from tests.SAVR2SAVR43 import RegistrationTest, HeartbeatPayloadTest, CombinedFieldsTest
-from tests.SAVR2SAVR16 import KernelFileMonitorTest
-from tests.SAVR2SAVR6 import ModuleEnumTest
+from tests.SAVR2SAVR7 import SAVR7 #01
+from tests.SAVR2SAVR14 import SAVR14 #08
+from tests.SAVR2SAVR13 import SAVR13 #09
+from tests.SAVR2SAVR18 import SAVR18 #05
+from tests.SAVR2SAVR15 import SAVR15 #07
+from tests.SAVR2SAVR43 import SAVR43_1, SAVR43_2, SAVR43_3
+from tests.SAVR2SAVR16 import SAVR16
+from tests.SAVR2SAVR6 import SAVR6
+from tests.SAVR9 import SAVR9
+from tests.SAVR17 import SAVR17
+from tests.SAVR4 import SAVR4
+from tests.SAVR29 import SAVR29
+from tests.SAVR12 import SAVR12
 from datetime import datetime, timezone
 
 #python overall.py --start "2026-07-02 16:00:00.049" --roster roster.json --out results.csv
 
-TEST_CLASSES = [ConfidenceTest, TcpStatsTest, ScanLatencyTest, DnsCorrelationTest, 
-SchannelTest, RegistrationTest, HeartbeatPayloadTest, CombinedFieldsTest, 
-KernelFileMonitorTest, ModuleEnumTest]
+#TEST_CLASSES = [ConfidenceTest, TcpStatsTest, ScanLatencyTest, DnsCorrelationTest, 
+#SchannelTest, RegistrationTest, HeartbeatPayloadTest, CombinedFieldsTest, 
+#KernelFileMonitorTest, ModuleEnumTest]
+TEST_CLASSES = [SAVR7, SAVR14, SAVR13, SAVR18, SAVR15, SAVR43_1, SAVR43_2, SAVR43_3,
+SAVR16, SAVR6, SAVR9, SAVR17, SAVR4, SAVR29, SAVR12]
 
 LOG_PATH    = Path(r"C:\Windows\System32\config\systemprofile\AppData\Local\Cybersenz\SecureAiService\Logs\SecureAiService.log")
 AGENTS_PATH = Path(r"C:\ProgramData\Cybersenz\config\agents\detected_agents.json")
@@ -40,8 +47,8 @@ def build_tests(roster_path, agents, sysinfo):
     cfg = json.loads(roster_path.read_text())
 
     # auto-resolve tcp_stats_test by_name entries into by_pid using live tasklist
-    if "tcp_stats_test" in cfg:
-        tcp_cfg = cfg["tcp_stats_test"]
+    if "SAVR14" in cfg:
+        tcp_cfg = cfg["SAVR14"]
         for proc_name, domain in tcp_cfg.get("by_name", {}).items():
             pids = get_pids_by_name(proc_name)
             print(f"looked up {proc_name} -> PIDs: {pids}")
