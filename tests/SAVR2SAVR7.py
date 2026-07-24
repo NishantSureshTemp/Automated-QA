@@ -7,10 +7,10 @@ CONF_RE = re.compile(
     r".*?conf\s+(?P<conf>[0-9.]+)\)"
 )
 
-class ConfidenceTest:
-    name = "confidence_test"
+class SAVR7:
+    name = "SAVR7"
 
-    def __init__(self, cfg, agents=None):
+    def __init__(self, cfg, agents, sysinfo):
         self.agents = agents or []
         self.config_path = Path(cfg.get("config_path", ""))
         self.expected_agents = cfg.get("expected_agents", [])
