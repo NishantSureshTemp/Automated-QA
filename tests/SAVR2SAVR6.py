@@ -12,10 +12,10 @@ This test reads only `agents` (detected_agents.json entries filtered
 by --start). The log window is not used.
 """
 
-class ModuleEnumTest:
-    name = "module_enum_test"
+class SAVR6:
+    name = "SAVR6"
 
-    def __init__(self, cfg, agents=None):
+    def __init__(self, cfg, agents, sysinfo):
         self.agents = agents or []
         self.expected_agents = cfg.get("expected_agents", [])
 
