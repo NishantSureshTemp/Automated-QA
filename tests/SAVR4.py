@@ -20,8 +20,8 @@ def _split_ip_port(addr):
     return ip_str, port_str
 
 
-class NetworkTableTest:
-    name = "network_table_test"
+class SAVR4:
+    name = "SAVR4"
 
     def __init__(self, cfg, agents=None, sysinfo=None):
         self.quic_pid_procs = cfg.get("quic_heuristic_processes", ["chrome.exe"])
