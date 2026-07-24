@@ -16,10 +16,10 @@ TCP_RE = re.compile(
     r"url=(?P<url>\S+)"
 )
 
-class DnsCorrelationTest:
-    name = "dns_correlation_test"
+class SAVR18:
+    name = "SAVR18"
 
-    def __init__(self, cfg, agents=None):
+    def __init__(self, cfg, agents, sysinfo):
         self.domains = cfg.get("domains", [])
 
         # per domain state
