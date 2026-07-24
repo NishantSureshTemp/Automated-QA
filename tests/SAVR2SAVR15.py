@@ -10,10 +10,10 @@ SCHANNEL_RE = re.compile(
     r"(?:\s+kex=(?P<kex>\S+))?"
 )
 
-class SchannelTest:
-    name = "schannel_test"
+class SAVR15:
+    name = "SAVR15"
 
-    def __init__(self, cfg, agents=None):
+    def __init__(self, cfg, agents, sysinfo):
         self.domains = cfg.get("domains", [])
         # domain -> first matching TLS event
         self.seen = {d: None for d in self.domains}
