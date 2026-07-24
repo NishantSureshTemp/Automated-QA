@@ -12,10 +12,10 @@ TCP_RE = re.compile(
     r"source=(?P<source>\S+)"
 )
 
-class TcpStatsTest:
-    name = "tcp_stats_test"
+class SAVR14:
+    name = "SAVR14"
 
-    def __init__(self, cfg, agents=None):
+    def __init__(self, cfg, agents, sysinfo):
         self.by_name = cfg.get("by_name", {})  # {"fixture.exe": "httpbin.org"}
         self.by_pid  = cfg.get("by_pid", {})   # {"1234": {"label":..., "domain":...}}
         self.seen = {}                          # pid -> list of snapshots
