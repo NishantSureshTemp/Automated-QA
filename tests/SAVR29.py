@@ -38,8 +38,8 @@ TS_RE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})")
 MAX_LOOKAHEAD = 500
 
 
-class PipelineWiringTest:
-    name = "pipeline_wiring_test"
+class SAVR29:
+    name = "SAVR29"
 
     def __init__(self, cfg, agents=None, sysinfo=None):
         self.max_lookahead = cfg.get("max_lookahead", MAX_LOOKAHEAD)
