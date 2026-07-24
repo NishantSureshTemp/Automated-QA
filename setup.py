@@ -31,7 +31,7 @@ def main():
 
     # 4. patch roster with real PID
     cfg = json.loads(ROSTER.read_text())
-    cfg["tcp_stats_test"]["by_pid"] = {
+    cfg["SAVR14"]["by_pid"] = {
         fixture_pid: {"label": "httpbin fixture", "domain": "httpbin.org"}
     }
     ROSTER.write_text(json.dumps(cfg, indent=2))
@@ -48,11 +48,29 @@ def main():
     python_pid = pid_line2.split("PID:")[-1].strip()
     print(f"[setup] python+torch fixture PID: {python_pid}")
 
-    # 6. wait for scanner cycles and registration to complete
+    #6: OpenAI fixture for SAVR12
+    open_ai = subprocess.Popen(
+        ["curl", "https://openai.com"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+    open_ai_pid = open_ai.pid
+    print(f"[setup] curl launched with PID {open_ai_pid}")
+    cfg = json.loads(ROSTER.read_text())
+    cfg["SAVR12"]["by_pid"] = {
+        str(open_ai_pid): {
+            "label": "openai fixture",
+            "domain": "openai.com"
+        }
+    }
+    ROSTER.write_text(json.dumps(cfg, indent=2))
+    print("[setup] roster patched")
+
+    # 7. wait for scanner cycles and registration to complete
     print("[setup] waiting 200 seconds for scanner cycles and registration...")
     time.sleep(180)
 
-    # 7. run schannel fixture shortly before suite runs
+    # 8. run schannel fixture shortly before suite runs
     print("[setup] running schannel fixture...")
     subprocess.run(
         ["powershell", "-Command",
@@ -62,7 +80,7 @@ def main():
     print("[setup] schannel fixture done")
     time.sleep(20)  # give scanner time to catch the TLS event
 
-    # 8. run the suite
+    # 9. run the suite
     print("[setup] running suite...")
     subprocess.run([
         "python", "overall.py",
@@ -71,7 +89,7 @@ def main():
         "--out", str(OUT),
     ])
 
-    # 9. clean up
+    # 10. clean up
     print("[setup] cleaning up fixtures...")
     httpbin.terminate()
     print(f"[setup] done -- results in {OUT}")
