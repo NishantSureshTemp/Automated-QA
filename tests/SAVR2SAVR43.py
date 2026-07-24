@@ -54,8 +54,8 @@ _SCAN_COMPLETE_RE = re.compile(
 # =====================================================================
 # Issue 1 - device registration with zero agent detections
 # =====================================================================
-class RegistrationTest:
-    name = "registration_test"
+class SAVR43_1:
+    name = "SAVR43_1"
 
     _MILESTONES = [
         ("fingerprint",   "Successfully generated device fingerprint"),
@@ -66,7 +66,7 @@ class RegistrationTest:
         ("heartbeat_ok",  "Successfully sent heartbeat request"),
     ]
 
-    def __init__(self, cfg, agents=None):
+    def __init__(self, cfg, agents, sysinfo):
         self.require_zero_agents = bool(cfg.get("require_zero_agents", True))
         self.seen = {}
         self.scan_counts = []
@@ -157,10 +157,10 @@ class RegistrationTest:
 # =====================================================================
 # Issue 2 - heartbeat payload contents (schema-configurable)
 # =====================================================================
-class HeartbeatPayloadTest:
-    name = "heartbeat_payload_test"
+class SAVR43_2:
+    name = "SAVR43_2"
 
-    def __init__(self, cfg, agents=None):
+    def __init__(self, cfg, agents, sysinfo):
         self.required = cfg.get("required_fields", ["ip_address"])
         self.forbidden = cfg.get("forbidden_fields", [])
         self.stats_key = cfg.get("stats_key", "sys_stats")
@@ -262,7 +262,7 @@ class HeartbeatPayloadTest:
 # =====================================================================
 # Issue 3 - combined detection events carry process + flow fields
 # =====================================================================
-class CombinedFieldsTest:
+class SAVR43_3:
     """Primary source: `agents` - the detected_agents.json entries overall.py
     already loaded and filtered by --start. Optionally supplemented by
     roster-listed event_files/event_dir (useful for replaying older,
@@ -283,7 +283,7 @@ class CombinedFieldsTest:
       }
     """
 
-    name = "combined_fields_test"
+    name = "SAVR43_3"
 
     DEFAULT_REQUIRED = [
         "os_name", "os_version", "logged_in_user", "network_adapters",
@@ -291,7 +291,7 @@ class CombinedFieldsTest:
         "process_start_time", "flow_id", "src_ip", "dst_ip", "bytes_out",
     ]
 
-    def __init__(self, cfg, agents=None):
+    def __init__(self, cfg, agents, sysinfo):
         self.agents = agents or []
         self.files = [Path(f) for f in cfg.get("event_files", [])]
         event_dir = cfg.get("event_dir")
