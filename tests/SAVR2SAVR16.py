@@ -53,7 +53,7 @@ def _ts(line):
     return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S.%f")
 
 
-class KernelFileMonitorTest:
+class SAVR16:
     """roster section:
       "kernel_file_monitor_test": {
         "expected_provider": "EDD08927",
@@ -67,9 +67,9 @@ class KernelFileMonitorTest:
       }
     """
 
-    name = "kernel_file_monitor_test"
+    name = "SAVR16"
 
-    def __init__(self, cfg, agents=None):
+    def __init__(self, cfg, agents, sysinfo):
         self.expected_provider = cfg.get("expected_provider", "EDD08927")
         self.expected_event_id = int(cfg.get("expected_event_id", 12))
         self.max_rate = cfg.get("max_event_rate_per_sec", 1000)
