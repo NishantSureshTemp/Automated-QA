@@ -17,10 +17,10 @@ POLL_LOOP_THRESHOLD_S  = 25.0   # avg interval >= this -> poll loop
 EVENT_DRIVEN_THRESHOLD_S = 25.0 # etw-to-scan gap >= this -> not event driven
 LATENCY_PASS_MS = 50            # acceptance criteria from TC-DET-09
 
-class ScanLatencyTest:
-    name = "scan_latency_test"
+class SAVR13:
+    name = "SAVR13"
 
-    def __init__(self, cfg, agents=None):
+    def __init__(self, cfg, agents, sysinfo):
         # no roster config needed for this test
         # cfg may be empty dict, that's fine
         self.scan_timestamps = []   # datetime of each "Starting process scan"
