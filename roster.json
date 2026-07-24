@@ -1,5 +1,5 @@
 {
-  "confidence_test": {
+  "SAVR7": {
     "config_path": "C:\\ProgramData\\Cybersenz\\config\\config.json",
     "expected_agents": [
       {
@@ -30,29 +30,29 @@
       }
     ]
   },
-  "tcp_stats_test": {
+  "SAVR14": {
     "by_name": {},
     "by_pid": {
-      "4584": {
+      "2308": {
         "label": "httpbin fixture",
         "domain": "httpbin.org"
       }
     }
   },
-  "scan_latency_test": {},
-  "dns_correlation_test": {
+  "SAVR13": {},
+  "SAVR18": {
     "domains": [
       "httpbin.org",
       "chatgpt.com"
     ]
   },
-  "schannel_test": {
+  "SAVR15": {
     "domains": [
       "copilot.microsoft.com"
     ]
   },
-  "registration_test": {},
-  "heartbeat_payload_test": {
+  "SAVR43_1": {},
+  "SAVR43_2": {
     "required_fields": [
       "ip_address",
       "hostname",
@@ -69,8 +69,8 @@
     "last_scan_time_format": "epoch",
     "require_response_success": true
   },
-  "combined_fields_test": {},
-  "kernel_file_monitor_test": {
+  "SAVR43_3": {},
+  "SAVR16": {
     "expected_provider": "EDD08927",
     "expected_event_id": 12,
     "max_event_rate_per_sec": 1000,
@@ -80,7 +80,7 @@
     "expect_matched_min": 0,
     "expect_dropped_min": 0
   },
-  "module_enum_test": {
+  "SAVR6": {
     "expected_agents": [
       {
         "process_name": "ollama.exe",
@@ -94,5 +94,44 @@
         ]
       }
     ]
+  },
+  "SAVR9": {
+    "expected_agents": [
+      {
+        "process_name": "ollama.exe",
+        "agent_process_integrity_level": "Medium",
+        "agent_process_is_elevated": false
+      },
+      {
+        "process_name": "M365Copilot.exe",
+        "agent_process_integrity_level": "Medium",
+        "agent_process_is_elevated": false
+      }
+    ]
+  },
+  "SAVR17": {
+    "expected_agents": [
+      {
+        "process_name": "python.exe",
+        "library_name": "torch_python.dll"
+      }
+    ]
+  },
+  "SAVR4": {
+    "udp_enumeration_shipped": false,
+    "quic_heuristic_processes": [
+      "chrome.exe"
+    ]
+  },
+  "SAVR29": {
+    "max_lookahead": 500
+  },
+  "SAVR12": {
+    "by_pid": {
+      "9264": {
+        "label": "openai fixture",
+        "domain": "openai.com"
+      }
+    }
   }
 }
