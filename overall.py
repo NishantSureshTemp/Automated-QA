@@ -15,6 +15,7 @@ from tests.SAVR17 import SAVR17
 from tests.SAVR4 import SAVR4
 from tests.SAVR29 import SAVR29
 from tests.SAVR12 import SAVR12
+from tests.SAVR27 import SAVR27
 from datetime import datetime, timezone
 
 #python overall.py --start "2026-07-02 16:00:00.049" --roster roster.json --out results.csv
@@ -23,7 +24,8 @@ from datetime import datetime, timezone
 #SchannelTest, RegistrationTest, HeartbeatPayloadTest, CombinedFieldsTest, 
 #KernelFileMonitorTest, ModuleEnumTest]
 TEST_CLASSES = [SAVR7, SAVR14, SAVR13, SAVR18, SAVR15, SAVR43_1, SAVR43_2, SAVR43_3,
-SAVR16, SAVR6, SAVR9, SAVR17, SAVR4, SAVR29, SAVR12]
+SAVR16, SAVR6, SAVR9, SAVR17, SAVR4, SAVR29, SAVR12, SAVR27]
+
 
 LOG_PATH    = Path(r"C:\Windows\System32\config\systemprofile\AppData\Local\Cybersenz\SecureAiService\Logs\SecureAiService.log")
 AGENTS_PATH = Path(r"C:\ProgramData\Cybersenz\config\agents\detected_agents.json")
