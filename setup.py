@@ -29,7 +29,16 @@ def main():
     fixture_pid = pid_line.split("PID:")[-1].strip()
     print(f"[setup] httpbin fixture PID: {fixture_pid}")
 
-    # 4. patch roster with real PID
+    #4: for chatgpt tcp connect
+    chatgpt = subprocess.Popen(
+        ["python", "-c",
+        "import requests, time; requests.get('https://chatgpt.com', timeout=30); time.sleep(10)"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+    print(f"[setup] chatgpt fixture launched with PID {chatgpt.pid}")
+
+    # 5. patch roster with real PID
     cfg = json.loads(ROSTER.read_text())
     cfg["SAVR14"]["by_pid"] = {
         fixture_pid: {"label": "httpbin fixture", "domain": "httpbin.org"}
@@ -37,7 +46,7 @@ def main():
     ROSTER.write_text(json.dumps(cfg, indent=2))
     print("[setup] roster patched")
 
-    #5. launch python+torch fixture for library detection test
+    #6. launch python+torch fixture for library detection test
     python_ai = subprocess.Popen(
         ["python", "-c",
         "import torch, time, os; print(f'python fixture PID: {os.getpid()}', flush=True);"
@@ -48,7 +57,7 @@ def main():
     python_pid = pid_line2.split("PID:")[-1].strip()
     print(f"[setup] python+torch fixture PID: {python_pid}")
 
-    #6: OpenAI fixture for SAVR12
+    #7: OpenAI fixture for SAVR12
     open_ai = subprocess.Popen(
         ["curl", "https://openai.com"],
         stdout=subprocess.DEVNULL,
@@ -66,21 +75,45 @@ def main():
     ROSTER.write_text(json.dumps(cfg, indent=2))
     print("[setup] roster patched")
 
-    # 7. wait for scanner cycles and registration to complete
-    print("[setup] waiting 200 seconds for scanner cycles and registration...")
-    time.sleep(180)
+    #8 anthropic fixture for SAVR4
+    anthropic = subprocess.Popen(
+        ["python", "-c",
+        "import requests, time; requests.get('https://anthropic.com', timeout=10); time.sleep(10)"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
 
-    # 8. run schannel fixture shortly before suite runs
-    print("[setup] running schannel fixture...")
+    #9: Docker ollama container launch
+    subprocess.run(["docker", "stop", "ollama_test"], capture_output=True)
+    subprocess.run(["docker", "rm",   "ollama_test"], capture_output=True)
+
+    container = subprocess.Popen(
+        ["docker", "run", "--name", "ollama_test", "ollama/ollama"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+    print(f"[setup] ollama container started")
+
+    # 10. wait for scanner cycles and registration to complete
+    print("[setup] waiting 200 seconds for scanner cycles and registration...")
+    time.sleep(180)    
+
+    # 11. run schannel fixture shortly before suite runs
+    print("[setup] running schannel fixtures...")
     subprocess.run(
         ["powershell", "-Command",
          "Invoke-WebRequest -Uri 'https://copilot.microsoft.com' -UseBasicParsing"],
         capture_output=True
     )
-    print("[setup] schannel fixture done")
+    subprocess.run(
+        ["powershell", "-Command",
+        "Invoke-WebRequest -Uri 'https://chat.openai.com' -UseBasicParsing"],
+        capture_output=True
+    )
+    print("[setup] schannel fixtures done")
     time.sleep(20)  # give scanner time to catch the TLS event
 
-    # 9. run the suite
+    # 12. run the suite
     print("[setup] running suite...")
     subprocess.run([
         "python", "overall.py",
@@ -89,9 +122,10 @@ def main():
         "--out", str(OUT),
     ])
 
-    # 10. clean up
+    # 13. clean up
     print("[setup] cleaning up fixtures...")
     httpbin.terminate()
+    chatgpt.terminate()
     print(f"[setup] done -- results in {OUT}")
 
 if __name__ == "__main__":
