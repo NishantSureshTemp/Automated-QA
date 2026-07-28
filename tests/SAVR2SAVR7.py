@@ -9,6 +9,7 @@ CONF_RE = re.compile(
 
 class SAVR7:
     name = "SAVR7"
+    link = ""
 
     def __init__(self, cfg, agents, sysinfo):
         self.agents = agents or []
