@@ -70,10 +70,10 @@ class SAVR15:
         if not hit["kex"]:
             partials.append("kex field absent")
         elif "?" in hit["kex"]:
-            partials.append(f"kex unresolved: {hit['kex']} (known defect SAVR-15)")
+            partials.append(f"kex unresolved: {hit['kex']}")
 
-        # check 5: alpn -- always absent per Round 2, report as known defect
-        partials.append("alpn not captured (known defect SAVR-15)")
+        # check 5: alpn -- always absent per Round 2
+        partials.append("alpn not captured")
 
         actual = (
             f"pid={hit['pid']} sni={hit['sni']} "
