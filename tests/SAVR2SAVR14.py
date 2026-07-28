@@ -107,7 +107,7 @@ class SAVR14:
         elif bytes_ok:
             result  = "FAIL"
             comment = (f"bytes non-zero on {len(bytes_ok)}/{total} snapshot(s) "
-                       f"but rtt=0ms on all. RTT not being computed (known defect)")
+                       f"but rtt=0ms on all.")
         else:
             result  = "FAIL"
             comment = (f"all {total} snapshot(s) have bytes_out=0 and bytes_in=0 "
