@@ -197,6 +197,22 @@ Look for a domain lookup (DNS query) being correctly linked to the connection th
 - **What it checks:** For each domain in the roster, confirms a successful DNS resolution is followed by a TCP connection line with `source=dns_etw` and a populated URL field.
 - **Known limitations:** `chatgpt.com` consistently produces PARTIAL — DNS resolution is captured but the TCP connect is not correlated, likely due to CDN redirection. This is a product-side IP-to-domain cache gap.
 
+### Container Detection (SAVR-27/28)
+Look for Docker containers running AI workloads being correctly detected, classified, and distinguished from non-AI containers.
+
+- **File:** `tests/SAVR2SAVR27a28.py`
+- **Roster key:** `SAVR27a28`
+- **What it checks:**
+  - `ollama_mount_test` — detected via `ContainerAnalysis`, `service_type=LocalModel`, `confidence>=0.85`, `.gguf` volume mount present in `model_mounts`
+  - `nginx_test` — correctly NOT forwarded to the detection engine
+  - `langchain_test` — `cmd_match=1` confirmed in log via `[DOCKER]` line with `pattern=langchain`
+  - `n8n_test` — `service_type=WorkflowAutomation`, `confidence>=0.60`
+  - `pyai_test` — `service_type=PythonAIAgent`, `env_api_keys_mask!=0` confirming `OPENAI_API_KEY` env var was detected
+- **Known limitations:**
+  - `model_mounts` is never populated even when a `.gguf` file is present and actively loaded — confirmed product gap
+  - n8n confidence is 0.50 without active OpenAI API calls, below the 0.60 threshold — tabled pending fixture complexity
+  - `cmd_match` and `image_match` flags are logged but not persisted to `detected_agents.json` — known gap
+
 ### Anomaly Pipeline (SAVR-29)
 Look for the full anomaly detection pipeline firing in order: rule triggered, dispatched, and output sent.
 
@@ -237,21 +253,6 @@ Look for a detection record on an AI program that's also using the network to in
 - **What it checks:** For each detected-agent record in the run window, verifies all 13 required process- and network-level fields are present and non-empty.
 - **Known limitations:** all 13 combined fields are absent from every agent entry in the current build — confirmed Issue 3 regression. Additionally, `event_type` field is not persisted to `detected_agents.json`. The test produces many rows due to accumulated entries from repeated runs; this will be addressed by filtering on `first_detected` in a future update.
 
-### Container Detection (SAVR-27/28)
-Look for Docker containers running AI workloads being correctly detected, classified, and distinguished from non-AI containers.
-
-- **File:** `tests/SAVR2SAVR27a28.py`
-- **Roster key:** `SAVR27a28`
-- **What it checks:**
-  - `ollama_mount_test` — detected via `ContainerAnalysis`, `service_type=LocalModel`, `confidence>=0.85`, `.gguf` volume mount present in `model_mounts`
-  - `nginx_test` — correctly NOT forwarded to the detection engine
-  - `langchain_test` — `cmd_match=1` confirmed in log via `[DOCKER]` line with `pattern=langchain`
-  - `n8n_test` — `service_type=WorkflowAutomation`, `confidence>=0.60`
-  - `pyai_test` — `service_type=PythonAIAgent`, `env_api_keys_mask!=0` confirming `OPENAI_API_KEY` env var was detected
-- **Known limitations:**
-  - `model_mounts` is never populated even when a `.gguf` file is present and actively loaded — confirmed product gap
-  - n8n confidence is 0.50 without active OpenAI API calls, below the 0.60 threshold — tabled pending fixture complexity
-  - `cmd_match` and `image_match` flags are logged but not persisted to `detected_agents.json` — known gap
 
 ## Roster Configuration
 
