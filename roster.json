@@ -33,7 +33,7 @@
   "SAVR14": {
     "by_name": {},
     "by_pid": {
-      "2308": {
+      "8556": {
         "label": "httpbin fixture",
         "domain": "httpbin.org"
       }
@@ -48,7 +48,8 @@
   },
   "SAVR15": {
     "domains": [
-      "copilot.microsoft.com"
+      "copilot.microsoft.com",
+      "chat.openai.com"
     ]
   },
   "SAVR43_1": {},
@@ -124,14 +125,26 @@
     ]
   },
   "SAVR29": {
-    "max_lookahead": 500
+    "max_lookahead": 2000
   },
   "SAVR12": {
     "by_pid": {
-      "9264": {
+      "6504": {
         "label": "openai fixture",
         "domain": "openai.com"
       }
     }
-  }
+  },
+  "SAVR27a28": {
+    "expect_service_type": "LocalModel",
+    "expect_detection_method": "ContainerAnalysis",
+    "expect_container_name": "ollama_mount_test",
+    "expect_model_mount": "/models/tinyllama.gguf"
+  },
+  "SAVR40": {
+    "cpu_idle_max_pct": 3.0,
+    "io_read_max_mb": 100.0,
+    "memory_slope_max_kb": 500.0
+  },
+  "SAVR5": {}
 }
