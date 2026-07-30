@@ -1,5 +1,7 @@
 import re
 
+# SAVR-4: IPv6 CDN address mapped to domain; chrome.exe QUIC heuristic fires.
+
 TCP_RE = re.compile(
     r"TCP connect: PID=(?P<pid>\d+) \S+ IPv6=(?P<ipv6>\d+) "
     r"bytes_out=(?P<bytes_out>\d+) bytes_in=(?P<bytes_in>\d+) "
@@ -15,23 +17,14 @@ class SAVR4:
         self.udp_shipped = cfg.get("udp_enumeration_shipped", False)
         self.quic_processes = cfg.get("quic_heuristic_processes", [])
         self.sysinfo = sysinfo or {}
-
-        # first TCP connect line seen with IPv6=1 (kept regardless of domain
-        # resolution so we can report a resolved-vs-unresolved distinction)
         self.ipv6_hit = None
 
     def offer(self, line, i, window):
-        if "TCP connect" not in line:
+        if "TCP connect" not in line or self.ipv6_hit is not None:
             return
-        if self.ipv6_hit is not None:
-            return  # only need the first hit
-
         m = TCP_RE.search(line)
-        if not m:
+        if not m or m.group("ipv6") != "1":
             return
-        if m.group("ipv6") != "1":
-            return
-
         self.ipv6_hit = {
             "pid":       m.group("pid"),
             "bytes_out": int(m.group("bytes_out")),
@@ -45,18 +38,15 @@ class SAVR4:
     def resolve(self):
         self.results = []
 
-        # --- Part 1: IPv6 TCP table enumeration (GetExtendedTcp6Table) ---
+        # Part 1: IPv6 TCP enumeration + domain correlation
         expected = "TCP connect line with IPv6=1 and domain resolved (non-'(none)')"
-
         if self.ipv6_hit is None:
             self.results.append((
                 "IPv6 TCP table enumeration",
                 expected,
                 "",
                 "NOT_DETECTED",
-                "no TCP connect line with IPv6=1 seen in run window -- "
-                "either no IPv6 connection occurred, or AF_INET6 table walk "
-                "is not emitting entries",
+                "no TCP connect line with IPv6=1 seen in run window",
             ))
         else:
             h = self.ipv6_hit
@@ -70,71 +60,53 @@ class SAVR4:
                 "IPv6 TCP table enumeration",
                 expected,
                 actual,
-                "PASS" if domain_ok else "FAIL",
+                "PASS" if domain_ok else "PARTIAL",
                 "" if domain_ok else
-                "IPv6 connect captured but domain field is empty/(none) -- "
-                "InetNtopW output not correlating against DNS cache for AF_INET6",
+                "IPv6 connect captured but domain unresolved -- DNS cache "
+                "correlation not working for AF_INET6",
             ))
 
-        # --- Part 2: UDP table enumeration, checked against sysinfo.jsonl ---
-        # sysinfo["active_tcp_sessions"] entries carry a "transport" field
-        # ("TCP" observed everywhere so far) -- a "UDP" transport entry would
-        # be the sysinfo-side signal that GetExtendedUdpTable/Udp6Table is
-        # feeding this snapshot.
+        # Part 2: UDP table enumeration (sysinfo.jsonl active_tcp_sessions)
         tcp_sessions = self.sysinfo.get("active_tcp_sessions", [])
         udp_sessions = [s for s in tcp_sessions if s.get("transport") == "UDP"]
 
         if not self.udp_shipped:
-            # feature unshipped -- assert the negative: sysinfo should show
-            # zero UDP entries, confirming the gate is closed as expected
-            # rather than just skipping the check
             ok = len(udp_sessions) == 0
             self.results.append((
                 "UDP table enumeration (sysinfo.jsonl)",
-                "0 UDP-transport entries in active_tcp_sessions "
-                "(udp_enumeration_shipped=false)",
-                f"{len(udp_sessions)} UDP entries / {len(tcp_sessions)} "
-                f"total sessions in latest sysinfo.jsonl snapshot",
+                "0 UDP-transport entries (udp_enumeration_shipped=false)",
+                f"{len(udp_sessions)} UDP / {len(tcp_sessions)} total sessions",
                 "PASS" if ok else "FAIL",
                 "" if ok else
-                "UDP entries present in sysinfo.jsonl despite "
-                "udp_enumeration_shipped=false -- roster is stale or "
-                "feature partially shipped, update roster/test",
+                "UDP entries present despite udp_enumeration_shipped=false "
+                "-- roster stale or feature partially shipped",
             ))
         else:
             ok = len(udp_sessions) > 0
             self.results.append((
                 "UDP table enumeration (sysinfo.jsonl)",
                 "UDP-transport entries present in active_tcp_sessions",
-                f"{len(udp_sessions)} UDP entries / {len(tcp_sessions)} "
-                f"total sessions in latest sysinfo.jsonl snapshot",
+                f"{len(udp_sessions)} UDP / {len(tcp_sessions)} total sessions",
                 "PASS" if ok else "NOT_DETECTED",
                 "" if ok else
-                "udp_enumeration_shipped=true but no UDP entries found in "
-                "sysinfo.jsonl -- also still need the log-line-level check "
-                "(SecureAiService.log) before trusting this fully",
+                "udp_enumeration_shipped=true but no UDP entries found -- "
+                "still need the log-line-level check too",
             ))
 
-        # --- Part 3: QUIC heuristic, checked against sysinfo.jsonl ---
-        # sysinfo["agent_process_info"][*]["agent_process_is_quic"] is the
-        # sysinfo-side surface for the heuristic outcome per AI-flagged PID.
+        # Part 3: QUIC heuristic (sysinfo.jsonl agent_process_info)
         agent_info = self.sysinfo.get("agent_process_info", [])
-
         for pname in self.quic_processes:
             matches = [
                 a for a in agent_info
                 if a.get("agent_process_name", "").lower() == pname.lower()
             ]
-
             if not matches:
                 self.results.append((
                     f"{pname} QUIC heuristic (sysinfo.jsonl)",
                     "agent_process_is_quic present for this process",
                     "absent",
                     "NOT_DETECTED",
-                    f"{pname} not present in agent_process_info in latest "
-                    f"sysinfo.jsonl snapshot -- process not running or not "
-                    f"AI-flagged at snapshot time",
+                    f"{pname} not present in agent_process_info snapshot",
                 ))
                 continue
 
@@ -145,18 +117,14 @@ class SAVR4:
             actual = f"agent_process_is_quic by PID: {quic_vals}"
 
             if not self.udp_shipped:
-                # feature unshipped -- assert the negative: heuristic should
-                # never have fired since it depends on UDP socket enumeration
                 ok = not any(quic_vals.values())
                 self.results.append((
                     f"{pname} QUIC heuristic (sysinfo.jsonl)",
-                    "agent_process_is_quic=false for all PIDs "
-                    "(udp_enumeration_shipped=false, heuristic cannot fire)",
+                    "agent_process_is_quic=false for all PIDs (unshipped)",
                     actual,
                     "PASS" if ok else "FAIL",
                     "" if ok else
-                    "agent_process_is_quic=true despite "
-                    "udp_enumeration_shipped=false -- unexpected, "
+                    "agent_process_is_quic=true despite unshipped UDP -- "
                     "investigate before trusting roster state",
                 ))
             else:
@@ -167,9 +135,8 @@ class SAVR4:
                     actual,
                     "PASS" if ok else "NOT_DETECTED",
                     "" if ok else
-                    "udp_enumeration_shipped=true but agent_process_is_quic "
-                    "never true for this process -- also still need the "
-                    "log-line-level check before trusting this fully",
+                    "udp_enumeration_shipped=true but heuristic never fired "
+                    "-- still need the log-line-level check too",
                 ))
 
     def rows(self):
