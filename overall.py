@@ -15,16 +15,19 @@ from tests.SAVR17 import SAVR17
 from tests.SAVR4 import SAVR4
 from tests.SAVR29 import SAVR29
 from tests.SAVR12 import SAVR12
-from tests.SAVR27 import SAVR27
+from tests.SAVR27a28 import SAVR27a28
+from tests.SAVR40 import SAVR40
+from tests.SAVR5 import SAVR5
 from datetime import datetime, timezone
 
 #python overall.py --start "2026-07-02 16:00:00.049" --roster roster.json --out results.csv
 
-#TEST_CLASSES = [ConfidenceTest, TcpStatsTest, ScanLatencyTest, DnsCorrelationTest, 
-#SchannelTest, RegistrationTest, HeartbeatPayloadTest, CombinedFieldsTest, 
-#KernelFileMonitorTest, ModuleEnumTest]
-TEST_CLASSES = [SAVR7, SAVR14, SAVR13, SAVR18, SAVR15, SAVR43_1, SAVR43_2, SAVR43_3,
-SAVR16, SAVR6, SAVR9, SAVR17, SAVR4, SAVR29, SAVR12, SAVR27]
+#TEST_CLASSES = [SAVR7, SAVR14, SAVR13, SAVR18, SAVR15, SAVR43_1, SAVR43_2, SAVR43_3,
+#SAVR16, SAVR6, SAVR9, SAVR17, SAVR4, SAVR29, SAVR12, SAVR27a28, SAVR40, SAVR5]
+
+
+TEST_CLASSES = [SAVR4, SAVR5, SAVR6, SAVR7, SAVR9, SAVR12, SAVR13, SAVR14, SAVR15, 
+SAVR16, SAVR17, SAVR18, SAVR27a28, SAVR29, SAVR40, SAVR43_1, SAVR43_2, SAVR43_3]
 
 
 LOG_PATH    = Path(r"C:\Windows\System32\config\systemprofile\AppData\Local\Cybersenz\SecureAiService\Logs\SecureAiService.log")
