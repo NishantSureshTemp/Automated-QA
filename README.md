@@ -1,4 +1,4 @@
-# Anomaly Detection Engine — Test Case Documentation
+# SecureAI Automated Test Suite
 
 Automated test suite validating **SecureAiService**, a Windows endpoint service that detects AI workloads (cloud, local, containerized, and embedded) via ETW instrumentation, and reports them to a central controller.
 
