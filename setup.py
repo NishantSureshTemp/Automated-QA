@@ -1,9 +1,29 @@
-import subprocess, json, time
+import subprocess, json, time, argparse
 from pathlib import Path
 from datetime import datetime
 
 ROSTER = Path("roster.json")
 OUT    = Path("results.csv")
+PERF_OUT = Path("perf_metrics.csv")
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--typeperf", choices=["Yes", "No"], default="No",
+                   help="If Yes, capture SecureAiService CPU/memory to "
+                        "perf_metrics.csv for the full run duration")
+    return p.parse_args()
+
+def start_typeperf():
+    counters = [
+        r"\Process(SecureAiService)\% Processor Time",
+        r"\Process(SecureAiService)\Working Set",
+    ]
+    print(f"[setup] starting typeperf capture -> {PERF_OUT}")
+    proc = subprocess.Popen(
+        ["typeperf"] + counters + ["-si", "5", "-o", str(PERF_OUT)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    return proc
 
 def wait_for_docker(timeout=60):
     print("[setup] waiting for Docker to be ready...")
@@ -42,6 +62,11 @@ def start_container(name, cmd):
     print(f"[setup] {name} status={status}")
 
 def main():
+
+    args = parse_args()
+
+    typeperf_proc = start_typeperf() if args.typeperf == "Yes" else None
+
     # 1. record start time
     start = datetime.now().strftime("%Y-%m-%d %H:%M:%S.000")
     print(f"[setup] start timestamp: {start}")
@@ -189,6 +214,9 @@ def main():
                  "n8n_test", "pyai_test"]:
         subprocess.run(["docker", "stop", name], capture_output=True)
         subprocess.run(["docker", "rm",   name], capture_output=True)
+    if typeperf_proc is not None:
+        typeperf_proc.terminate()
+        print(f"[setup] typeperf capture stopped -- see {PERF_OUT}")
     print(f"[setup] done -- results in {OUT}")
 
 if __name__ == "__main__":
