@@ -2,6 +2,9 @@ import argparse, shutil, csv, re
 from pathlib import Path
 import json
 import subprocess
+from collections import defaultdict
+from datetime import datetime, timezone
+
 from tests.SAVR2SAVR7 import SAVR7 #01
 from tests.SAVR2SAVR14 import SAVR14 #08
 from tests.SAVR2SAVR13 import SAVR13 #09
@@ -18,17 +21,13 @@ from tests.SAVR12 import SAVR12
 from tests.SAVR27a28 import SAVR27a28
 from tests.SAVR40 import SAVR40
 from tests.SAVR5 import SAVR5
-from datetime import datetime, timezone
+from tests.SAVR44 import SAVR44
+from tests.SAVR41 import SAVR41
 
 #python overall.py --start "2026-07-02 16:00:00.049" --roster roster.json --out results.csv
 
-#TEST_CLASSES = [SAVR7, SAVR14, SAVR13, SAVR18, SAVR15, SAVR43_1, SAVR43_2, SAVR43_3,
-#SAVR16, SAVR6, SAVR9, SAVR17, SAVR4, SAVR29, SAVR12, SAVR27a28, SAVR40, SAVR5]
-
-
 TEST_CLASSES = [SAVR4, SAVR5, SAVR6, SAVR7, SAVR9, SAVR12, SAVR13, SAVR14, SAVR15, 
-SAVR16, SAVR17, SAVR18, SAVR27a28, SAVR29, SAVR40, SAVR43_1, SAVR43_2, SAVR43_3]
-
+SAVR16, SAVR17, SAVR18, SAVR27a28, SAVR29, SAVR40, SAVR41, SAVR43_1, SAVR43_2, SAVR43_3, SAVR44]
 
 LOG_PATH    = Path(r"C:\Windows\System32\config\systemprofile\AppData\Local\Cybersenz\SecureAiService\Logs\SecureAiService.log")
 AGENTS_PATH = Path(r"C:\ProgramData\Cybersenz\config\agents\detected_agents.json")
@@ -46,7 +45,7 @@ def get_pids_by_name(proc_name):
             pids.append(parts[1])
     return pids
 
-def build_tests(roster_path, agents, sysinfo):
+def build_tests(roster_path, agents, sysinfo, test_filter=None):
     if roster_path is None:
         return []
     cfg = json.loads(roster_path.read_text())
@@ -61,7 +60,12 @@ def build_tests(roster_path, agents, sysinfo):
                 tcp_cfg["by_pid"][pid] = {"label": proc_name, "domain": domain}
         tcp_cfg["by_name"] = {}
 
-    return [cls(cfg[cls.name], agents, sysinfo) for cls in TEST_CLASSES if cls.name in cfg]
+    allowed = {f"SAVR{n}" for n in test_filter} if test_filter else None
+
+    return [cls(cfg[cls.name], agents, sysinfo)
+            for cls in TEST_CLASSES
+            if cls.name in cfg and (allowed is None or cls.name in allowed)]
+
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -70,6 +74,9 @@ def parse_args():
     p.add_argument("--out", default="results.csv", type=Path)
     p.add_argument("--roster", type=Path,
                    help="JSON of expected subjects -> conf range")
+    p.add_argument("--tests", nargs="*", default=None,
+                   metavar="SAVR",
+                   help="Run only these tests, e.g. --tests 4 5 7 43_1")
     return p.parse_args()
 
 def snapshot(log_path: Path) -> Path:
@@ -156,6 +163,33 @@ def write_report(tests, out: Path):
             for row in t.rows():
                 w.writerow(row)
 
+def summarize_report(tests):
+    # Aggregate counts per test name
+    counts = defaultdict(lambda: {"total": 0, "PASS": 0, "FAIL": 0, 
+                                   "PARTIAL": 0, "NOT_DETECTED": 0, "INCONCLUSIVE": 0})
+    for t in tests:
+        name = t.name  # e.g. "SAVR7"
+        for row in t.rows():
+            # row = [test, subject, expected, actual, result, comments]
+            result = row[4].strip() if len(row) > 4 else ""
+            counts[name]["total"] += 1
+            if result in counts[name]:
+                counts[name][result] += 1
+
+    # Print in SAVR-number order
+    def savr_sort_key(name):
+        m = re.search(r"(\d+)", name)
+        return int(m.group(1)) if m else 0
+
+    for name in sorted(counts, key=savr_sort_key):
+        c = counts[name]
+        print(
+            f"[Test] {name}: {c['total']} items, "
+            f"{c['PASS']} PASS, {c['FAIL']} FAIL, "
+            f"{c['PARTIAL']} PARTIAL, {c['NOT_DETECTED']} NOT_DETECTED, "
+            f"{c['INCONCLUSIVE']} INCONCLUSIVE"
+        )
+
 def main():
     a = parse_args()
     snap        = snapshot(LOG_PATH)
@@ -163,9 +197,10 @@ def main():
     window      = load_window(snap, a.start)
     agents      = load_agents(agents_snap, a.start)  # fixed: use load_agents not raw json.loads
     sysinfo = load_sysinfo(SYSINFO_PATH)
-    tests       = build_tests(a.roster, agents, sysinfo)
+    tests = build_tests(a.roster, agents, sysinfo, a.tests)
     run(window, tests)
     write_report(tests, a.out)
+    summarize_report(tests)
 
 if __name__ == "__main__":
     main()
