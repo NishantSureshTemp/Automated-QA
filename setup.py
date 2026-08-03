@@ -1,223 +1,206 @@
-import subprocess, json, time, argparse
+import argparse, shutil, csv, re
 from pathlib import Path
-from datetime import datetime
+import json
+import subprocess
+from collections import defaultdict
+from datetime import datetime, timezone
 
-ROSTER = Path("roster.json")
-OUT    = Path("results.csv")
-PERF_OUT = Path("perf_metrics.csv")
+from tests.SAVR2SAVR7 import SAVR7 #01
+from tests.SAVR2SAVR14 import SAVR14 #08
+from tests.SAVR2SAVR13 import SAVR13 #09
+from tests.SAVR2SAVR18 import SAVR18 #05
+from tests.SAVR2SAVR15 import SAVR15 #07
+from tests.SAVR2SAVR43 import SAVR43_1, SAVR43_2, SAVR43_3
+from tests.SAVR2SAVR16 import SAVR16
+from tests.SAVR2SAVR6 import SAVR6
+from tests.SAVR9 import SAVR9
+from tests.SAVR17 import SAVR17
+from tests.SAVR4 import SAVR4
+from tests.SAVR29 import SAVR29
+from tests.SAVR12 import SAVR12
+from tests.SAVR27a28 import SAVR27a28
+from tests.SAVR40 import SAVR40
+from tests.SAVR5 import SAVR5
+from tests.SAVR44 import SAVR44
+from tests.SAVR41 import SAVR41
+
+#python overall.py --start "2026-07-02 16:00:00.049" --roster roster.json --out results.csv
+
+TEST_CLASSES = [SAVR4, SAVR5, SAVR6, SAVR7, SAVR9, SAVR12, SAVR13, SAVR14, SAVR15, 
+SAVR16, SAVR17, SAVR18, SAVR27a28, SAVR29, SAVR40, SAVR41, SAVR43_1, SAVR43_2, SAVR43_3, SAVR44]
+
+LOG_PATH    = Path(r"C:\Windows\System32\config\systemprofile\AppData\Local\Cybersenz\SecureAiService\Logs\SecureAiService.log")
+AGENTS_PATH = Path(r"C:\ProgramData\Cybersenz\config\agents\detected_agents.json")
+SYSINFO_PATH = Path(r"C:\ProgramData\Cybersenz\config\sysinfo.jsonl")
+
+def get_pids_by_name(proc_name):
+    result = subprocess.run(
+        ["tasklist", "/FI", f"IMAGENAME eq {proc_name}", "/FO", "CSV", "/NH"],
+        capture_output=True, text=True
+    )
+    pids = []
+    for line in result.stdout.strip().splitlines():
+        parts = line.strip('"').split('","')
+        if len(parts) >= 2:
+            pids.append(parts[1])
+    return pids
+
+def build_tests(roster_path, agents, sysinfo, test_filter=None):
+    if roster_path is None:
+        return []
+    cfg = json.loads(roster_path.read_text())
+
+    # auto-resolve tcp_stats_test by_name entries into by_pid using live tasklist
+    if "SAVR14" in cfg:
+        tcp_cfg = cfg["SAVR14"]
+        for proc_name, domain in tcp_cfg.get("by_name", {}).items():
+            pids = get_pids_by_name(proc_name)
+            print(f"looked up {proc_name} -> PIDs: {pids}")
+            for pid in pids:
+                tcp_cfg["by_pid"][pid] = {"label": proc_name, "domain": domain}
+        tcp_cfg["by_name"] = {}
+
+    allowed = {f"SAVR{n}" for n in test_filter} if test_filter else None
+
+    return [cls(cfg[cls.name], agents, sysinfo)
+            for cls in TEST_CLASSES
+            if cls.name in cfg and (allowed is None or cls.name in allowed)]
+
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--typeperf", choices=["Yes", "No"], default="No",
-                   help="If Yes, capture SecureAiService CPU/memory to "
-                        "perf_metrics.csv for the full run duration")
+    p.add_argument("--start", required=True,
+                   help="Run-start timestamp, e.g. '2026-06-25 08:13:00.000'")
+    p.add_argument("--out", default="results.csv", type=Path)
+    p.add_argument("--roster", type=Path,
+                   help="JSON of expected subjects -> conf range")
+    p.add_argument("--tests", nargs="*", default=None,
+                   metavar="SAVR",
+                   help="Run only these tests, e.g. --tests 4 5 7 43_1")
     return p.parse_args()
 
-def start_typeperf():
-    counters = [
-        r"\Process(SecureAiService)\% Processor Time",
-        r"\Process(SecureAiService)\Working Set",
-    ]
-    print(f"[setup] starting typeperf capture -> {PERF_OUT}")
-    proc = subprocess.Popen(
-        ["typeperf"] + counters + ["-si", "5", "-o", str(PERF_OUT)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    return proc
+def snapshot(log_path: Path) -> Path:
+    # write locally, not next to the protected log file
+    snap = Path("log.snapshot")
+    shutil.copy2(log_path, snap)
+    return snap
 
-def wait_for_docker(timeout=60):
-    print("[setup] waiting for Docker to be ready...")
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        result = subprocess.run(
-            ["docker", "info"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            print("[setup] Docker is ready")
-            return True
-        time.sleep(3)
-    print("[setup] WARNING: Docker not ready after timeout")
-    return False
+def snapshot_agents(agents_path: Path) -> Path:
+    snap = Path("agents.snapshot")
+    shutil.copy2(agents_path, snap)
+    return snap
 
-def start_container(name, cmd):
-    subprocess.run(["docker", "stop", name], capture_output=True)
-    subprocess.run(["docker", "rm",   name], capture_output=True)
-    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(5)
-    result = subprocess.run(
-        ["docker", "inspect", "--format", "{{.State.Status}}", name],
-        capture_output=True, text=True
+timestamp_re = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})")
+
+def load_window(snap: Path, start: str) -> list[str]:
+    lines = snap.read_text(encoding="utf-8", errors="replace").splitlines()
+    out, started = [], False
+    for line in lines:
+        m = timestamp_re.match(line)
+        if not started:
+            if m and m.group(1) >= start:   # >= not ==, string compare is safe for this format
+                started = True
+            else:
+                continue
+        out.append(line)
+    return out   # indexable array; multi-line matchers can peek forward
+
+def load_agents(agents_snap: Path, start: str) -> list[dict]:
+    # parse start as local naive datetime then treat as UTC for comparison
+    start_dt = datetime.strptime(start, "%Y-%m-%d %H:%M:%S.%f").replace(
+        tzinfo=timezone.utc
     )
-    status = result.stdout.strip()
-    if status != "running":
-        print(f"[setup] WARNING: {name} status={status}, attempting docker start")
-        subprocess.run(["docker", "start", name], capture_output=True)
-        time.sleep(3)
-        result = subprocess.run(
-            ["docker", "inspect", "--format", "{{.State.Status}}", name],
-            capture_output=True, text=True
+    data = json.loads(agents_snap.read_text(encoding="utf-8"))
+    active = []
+    for agent in data.get("agents", []):
+        last_seen = agent.get("last_seen", "")
+        if not last_seen:
+            continue
+        try:
+            ls_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if ls_dt >= start_dt:
+            active.append(agent)
+    return active
+
+def load_sysinfo(sysinfo_path: Path) -> dict:
+    with sysinfo_path.open("rb") as f:
+        f.seek(0, 2)          # seek to end of file
+        pos = f.tell()
+        
+        # walk backwards skipping any trailing newlines
+        while pos > 0:
+            pos -= 1
+            f.seek(pos)
+            if f.read(1) not in (b"\n", b"\r", b" "):
+                break
+        
+        # now find the start of this last line
+        while pos > 0:
+            pos -= 1
+            f.seek(pos)
+            if f.read(1) in (b"\n", b"\r"):
+                break
+        
+        last_line = f.readline().decode("utf-8").strip()
+    
+    return json.loads(last_line) if last_line else {}
+
+def run(window, tests):
+    for i, line in enumerate(window):
+        for t in tests:
+            t.offer(line, i, window)
+    for t in tests:
+        t.resolve()
+
+def write_report(tests, out: Path):
+    with out.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["test", "subject", "expected", "actual",
+                    "result", "comments"])
+        for t in tests:
+            for row in t.rows():
+                w.writerow(row)
+
+def summarize_report(tests):
+    # Aggregate counts per test name
+    counts = defaultdict(lambda: {"total": 0, "PASS": 0, "FAIL": 0, 
+                                   "PARTIAL": 0, "NOT_DETECTED": 0, "INCONCLUSIVE": 0})
+    for t in tests:
+        name = t.name  # e.g. "SAVR7"
+        for row in t.rows():
+            # row = [test, subject, expected, actual, result, comments]
+            result = row[4].strip() if len(row) > 4 else ""
+            counts[name]["total"] += 1
+            if result in counts[name]:
+                counts[name][result] += 1
+
+    # Print in SAVR-number order
+    def savr_sort_key(name):
+        m = re.search(r"(\d+)", name)
+        return int(m.group(1)) if m else 0
+
+    for name in sorted(counts, key=savr_sort_key):
+        c = counts[name]
+        print(
+            f"[Test] {name}: {c['total']} items, "
+            f"{c['PASS']} PASS, {c['FAIL']} FAIL, "
+            f"{c['PARTIAL']} PARTIAL, {c['NOT_DETECTED']} NOT_DETECTED, "
+            f"{c['INCONCLUSIVE']} INCONCLUSIVE"
         )
-        status = result.stdout.strip()
-    print(f"[setup] {name} status={status}")
 
 def main():
-
-    args = parse_args()
-
-    typeperf_proc = start_typeperf() if args.typeperf == "Yes" else None
-
-    # 1. record start time
-    start = datetime.now().strftime("%Y-%m-%d %H:%M:%S.000")
-    print(f"[setup] start timestamp: {start}")
-
-    # 2. restart service
-    print("[setup] restarting SecureAiService...")
-    subprocess.run(["net", "stop", "SecureAiService"], capture_output=True)
-    time.sleep(3)
-    subprocess.run(["net", "start", "SecureAiService"], capture_output=True)
-    time.sleep(5)
-
-    # 3. launch httpbin fixture
-    httpbin = subprocess.Popen(
-        ["python", "-c",
-         "import requests, time, os; print(f'fixture PID: {os.getpid()}', flush=True);"
-         "[requests.get('https://httpbin.org/get') or time.sleep(30) for _ in range(20)]"],
-        stdout=subprocess.PIPE, text=True
-    )
-    pid_line = httpbin.stdout.readline().strip()
-    fixture_pid = pid_line.split("PID:")[-1].strip()
-    print(f"[setup] httpbin fixture PID: {fixture_pid}")
-
-    # 4. chatgpt fixture for SAVR18
-    chatgpt = subprocess.Popen(
-        ["python", "-c",
-         "import requests, time; requests.get('https://chatgpt.com', timeout=30); time.sleep(10)"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-    print(f"[setup] chatgpt fixture launched with PID {chatgpt.pid}")
-
-    # 5. patch roster with httpbin PID
-    cfg = json.loads(ROSTER.read_text())
-    cfg["SAVR14"]["by_pid"] = {
-        fixture_pid: {"label": "httpbin fixture", "domain": "httpbin.org"}
-    }
-    ROSTER.write_text(json.dumps(cfg, indent=2))
-    print("[setup] roster patched with httpbin PID")
-
-    # 6. python+torch fixture for library detection
-    python_ai = subprocess.Popen(
-        ["python", "-c",
-         "import torch, time, os; print(f'python fixture PID: {os.getpid()}', flush=True);"
-         "time.sleep(300)"],
-        stdout=subprocess.PIPE, text=True
-    )
-    pid_line2 = python_ai.stdout.readline().strip()
-    python_pid = pid_line2.split("PID:")[-1].strip()
-    print(f"[setup] python+torch fixture PID: {python_pid}")
-
-    # 7. OpenAI fixture for SAVR12
-    open_ai = subprocess.Popen(
-        ["curl", "https://openai.com"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-    cfg = json.loads(ROSTER.read_text())
-    cfg["SAVR12"]["by_pid"] = {
-        str(open_ai.pid): {"label": "openai fixture", "domain": "openai.com"}
-    }
-    ROSTER.write_text(json.dumps(cfg, indent=2))
-    print(f"[setup] curl launched with PID {open_ai.pid}, roster patched")
-
-    # 8. anthropic fixture for SAVR4
-    subprocess.Popen(
-        ["python", "-c",
-         "import requests, time; requests.get('https://anthropic.com', timeout=10); time.sleep(10)"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-    print("[setup] anthropic fixture launched")
-
-    # 9. wait for Docker to be ready then pull images
-    wait_for_docker()
-    print("[setup] pulling docker images...")
-    subprocess.run(["docker", "pull", "ollama/ollama"], capture_output=True)
-    subprocess.run(["docker", "pull", "nginx"],         capture_output=True)
-    subprocess.run(["docker", "pull", "python:3.11"],   capture_output=True)
-    subprocess.run(["docker", "pull", "n8nio/n8n"],     capture_output=True)
-    print("[setup] docker images ready")
-
-    # 10. ollama container with model volume
-    start_container("ollama_mount_test", [
-        "docker", "run", "--name", "ollama_mount_test",
-        "-v", r"C:\models:/models",
-        "ollama/ollama"
-    ])
-
-    # 11. nginx -- enumerated but not detected as AI
-    start_container("nginx_test", [
-        "docker", "run", "--name", "nginx_test", "nginx"
-    ])
-
-    # 12. langchain -- detected via command match
-    start_container("langchain_test", [
-        "docker", "run", "--name", "langchain_test",
-        "python:3.11", "python", "-c",
-        "import time; time.sleep(300)  # langchain"
-    ])
-
-    # 13. n8n -- WorkflowAutomation detection
-    start_container("n8n_test", [
-        "docker", "run", "--name", "n8n_test", "n8nio/n8n"
-    ])
-
-    # 14. pyai -- env var + command match detection
-    start_container("pyai_test", [
-        "docker", "run", "--name", "pyai_test",
-        "-e", "OPENAI_API_KEY=sk-test1234567890abcdef",
-        "python:3.11", "python", "-c",
-        "import time; time.sleep(300)  # langchain"
-    ])
-
-    # 15. wait for scanner cycles
-    print("[setup] waiting 240 seconds for scanner cycles...")
-    time.sleep(240)
-
-    # 16. schannel fixtures
-    print("[setup] running schannel fixtures...")
-    subprocess.run(
-        ["powershell", "-Command",
-         "Invoke-WebRequest -Uri 'https://copilot.microsoft.com' -UseBasicParsing"],
-        capture_output=True
-    )
-    subprocess.run(
-        ["powershell", "-Command",
-         "Invoke-WebRequest -Uri 'https://chat.openai.com' -UseBasicParsing"],
-        capture_output=True
-    )
-    print("[setup] schannel fixtures done")
-    time.sleep(20)
-
-    # 17. run the suite
-    print("[setup] running suite...")
-    subprocess.run([
-        "python", "overall.py",
-        "--start", start,
-        "--roster", str(ROSTER),
-        "--out", str(OUT),
-    ])
-
-    # 18. clean up
-    print("[setup] cleaning up...")
-    httpbin.terminate()
-    chatgpt.terminate()
-    python_ai.terminate()
-    for name in ["ollama_mount_test", "nginx_test", "langchain_test",
-                 "n8n_test", "pyai_test"]:
-        subprocess.run(["docker", "stop", name], capture_output=True)
-        subprocess.run(["docker", "rm",   name], capture_output=True)
-    if typeperf_proc is not None:
-        typeperf_proc.terminate()
-        print(f"[setup] typeperf capture stopped -- see {PERF_OUT}")
-    print(f"[setup] done -- results in {OUT}")
+    a = parse_args()
+    snap        = snapshot(LOG_PATH)
+    agents_snap = snapshot_agents(AGENTS_PATH)
+    window      = load_window(snap, a.start)
+    agents      = load_agents(agents_snap, a.start)  # fixed: use load_agents not raw json.loads
+    sysinfo = load_sysinfo(SYSINFO_PATH)
+    tests = build_tests(a.roster, agents, sysinfo, a.tests)
+    run(window, tests)
+    write_report(tests, a.out)
+    summarize_report(tests)
 
 if __name__ == "__main__":
     main()
