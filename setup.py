@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 
 ROSTER = Path("roster.json")
-OUT    = Path("results.csv")
+OUT    = Path("results.xlsx")
 PERF_OUT = Path("perf_metrics.csv")
 
 def parse_args():
