@@ -4,6 +4,9 @@ import json
 import subprocess
 from collections import defaultdict
 from datetime import datetime, timezone
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment
+from openpyxl.utils import get_column_letter
 
 from tests.SAVR2SAVR7 import SAVR7 #01
 from tests.SAVR2SAVR14 import SAVR14 #08
@@ -71,7 +74,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--start", required=True,
                    help="Run-start timestamp, e.g. '2026-06-25 08:13:00.000'")
-    p.add_argument("--out", default="results.csv", type=Path)
+    p.add_argument("--out", default=Path("results.xlsx"), type=Path)
     p.add_argument("--roster", type=Path,
                    help="JSON of expected subjects -> conf range")
     p.add_argument("--tests", nargs="*", default=None,
@@ -154,14 +157,57 @@ def run(window, tests):
     for t in tests:
         t.resolve()
 
+# column widths (Excel character units) and wrap behavior per column
+COLUMN_WIDTHS = {
+    "test":     12,
+    "subject":  28,
+    "expected": 38,
+    "actual":   42,
+    "result":   14,
+    "comments": 55,
+}
+RESULT_FILL = {
+    "PASS":        "C6EFCE",
+    "FAIL":        "FFC7CE",
+    "NOT_DETECTED": "FFEB9C",
+    "PARTIAL":     "FFEB9C",
+    "INCONCLUSIVE": "D9D9D9",
+}
+
 def write_report(tests, out: Path):
-    with out.open("w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["test", "subject", "expected", "actual",
-                    "result", "comments"])
-        for t in tests:
-            for row in t.rows():
-                w.writerow(row)
+    from openpyxl.styles import PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "results"
+
+    headers = ["test", "subject", "expected", "actual", "result", "comments"]
+    ws.append(headers)
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+        ws.column_dimensions[get_column_letter(col_idx)].width = COLUMN_WIDTHS[header]
+
+    row_idx = 2
+    for t in tests:
+        for row in t.rows():
+            ws.append(row)
+            result_val = row[4] if len(row) > 4 else ""
+            fill_color = RESULT_FILL.get(str(result_val).strip())
+            for col_idx in range(1, len(headers) + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                if fill_color and headers[col_idx - 1] == "result":
+                    cell.fill = PatternFill(start_color=fill_color,
+                                             end_color=fill_color,
+                                             fill_type="solid")
+            row_idx += 1
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+    wb.save(out)
 
 def summarize_report(tests):
     # Aggregate counts per test name
